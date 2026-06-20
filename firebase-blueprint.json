@@ -1,0 +1,35 @@
+{
+  "projectInfo": {
+    "name": "AS Rosa Parks Manager"
+  },
+  "collections": [
+    {
+      "name": "students",
+      "description": "Collection of students registered in the sports association.",
+      "securityRules": {
+        "read": "true",
+        "create": "true",
+        "update": "true",
+        "delete": "true"
+      },
+      "schema": {
+        "fields": [
+          { "name": "lastName", "type": "string", "description": "Student's last name" },
+          { "name": "firstName", "type": "string", "description": "Student's first name" },
+          { "name": "classGroup", "type": "string", "description": "Student's class group" },
+          { "name": "schoolYear", "type": "string", "description": "Current school year, e.g., 2023-2024" },
+          { "name": "licenseNumber", "type": "string", "description": "Sports license number" },
+          { "name": "paid", "type": "string", "description": "Payment status" },
+          { "name": "amount", "type": "string", "description": "Amount paid" },
+          { "name": "paymentMethod", "type": "string", "description": "Payment method used" },
+          { "name": "parentalAuth", "type": "string", "description": "Parental authorization status" },
+          { "name": "imageRights", "type": "string", "description": "Image rights authorization" },
+          { "name": "tshirt", "type": "string", "description": "T-shirt provided" },
+          { "name": "size", "type": "string", "description": "T-shirt size" },
+          { "name": "createdAt", "type": "timestamp" },
+          { "name": "updatedAt", "type": "timestamp" }
+        ]
+      }
+    }
+  ]
+}
