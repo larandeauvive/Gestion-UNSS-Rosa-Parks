@@ -8,8 +8,10 @@ export interface Student {
   paid: string; // Payé (OUI/NON)
   amount: string; // Montant
   paymentMethod: string; // Mode de Paiement
+  checkNumber?: string; // Numéro de chèque
   parentalAuth: string; // Autorisation Parentale
   imageRights: string; // Droit à l'image
+  swimmingCertificate?: string; // Savoir nager
   tshirt: string; // T-shirt
   size: string; // Taille
   birthDate?: string; // Date de naissance

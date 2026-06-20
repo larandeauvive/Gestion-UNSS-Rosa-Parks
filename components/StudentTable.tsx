@@ -2,12 +2,13 @@ import React from 'react';
 import { Student, ColumnDefinition } from '../types';
 import { Trash2, ArrowRightLeft, CalendarDays } from 'lucide-react';
 
-interface StudentTableProps {
+export interface StudentTableProps {
   students: Student[];
   columns: ColumnDefinition[];
   selectedIds: Set<string>;
   onSelectAll: () => void;
   onSelectRow: (id: string) => void;
+  onRowClick?: (student: Student) => void;
 }
 
 export const StudentTable: React.FC<StudentTableProps> = ({
@@ -16,6 +17,7 @@ export const StudentTable: React.FC<StudentTableProps> = ({
   selectedIds,
   onSelectAll,
   onSelectRow,
+  onRowClick
 }) => {
   const allSelected = students.length > 0 && selectedIds.size === students.length;
   const isIndeterminate = selectedIds.size > 0 && selectedIds.size < students.length;
@@ -51,9 +53,10 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                 return (
                   <tr 
                     key={student.id} 
-                    className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-slate-50' : ''}`}
+                    onClick={() => onRowClick?.(student)}
+                    className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-slate-50' : ''} ${onRowClick ? 'cursor-pointer' : ''}`}
                   >
-                    <td className="p-4 text-center">
+                    <td className="p-4 text-center" onClick={e => e.stopPropagation()}>
                       <input 
                         type="checkbox" 
                         className="w-4 h-4 text-slate-900 rounded border-gray-300 focus:ring-slate-900 cursor-pointer"

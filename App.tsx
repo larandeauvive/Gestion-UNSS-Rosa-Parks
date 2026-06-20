@@ -8,6 +8,7 @@ import { Modal } from './components/Modal';
 import { StudentTable } from './components/StudentTable';
 import { ImportWizard } from './components/ImportWizard';
 import { YearRolloverWizard } from './components/YearRolloverWizard';
+import { EditStudentModal } from './components/EditStudentModal';
 import { importFromCSV } from './lib/importCsv';
 import { deleteMultipleStudents, updateMultipleStudents, addStudent } from './lib/db';
 
@@ -21,6 +22,8 @@ const INITIAL_COLUMNS: ColumnDefinition[] = [
   { key: 'paid', label: 'Payé', visible: true },
   { key: 'amount', label: 'Montant', visible: true },
   { key: 'paymentMethod', label: 'Paiement', visible: true },
+  { key: 'checkNumber', label: 'N° Chèque', visible: false },
+  { key: 'swimmingCertificate', label: 'Savoir Nager', visible: false },
   { key: 'parentalAuth', label: 'Auto. Parentale', visible: false },
   { key: 'imageRights', label: 'Droit Image', visible: false },
   { key: 'tshirt', label: 'T-shirt', visible: true },
@@ -47,6 +50,8 @@ export default function App() {
   const [isRolloverOpen, setIsRolloverOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  
+  const [editStudent, setEditStudent] = useState<Student | null>(null);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -351,6 +356,7 @@ export default function App() {
           selectedIds={selectedIds}
           onSelectAll={handleSelectAll}
           onSelectRow={handleSelectRow}
+          onRowClick={(student) => setEditStudent(student)}
         />
         
         <div className="flex justify-between items-center text-xs text-slate-500 pt-2 pb-8">
@@ -361,6 +367,13 @@ export default function App() {
       </main>
 
       {/* Modals */}
+      <EditStudentModal
+        isOpen={!!editStudent}
+        student={editStudent}
+        onClose={() => setEditStudent(null)}
+        onSuccess={() => setEditStudent(null)}
+      />
+
       <ImportWizard 
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
