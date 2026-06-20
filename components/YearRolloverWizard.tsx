@@ -125,7 +125,7 @@ export const YearRolloverWizard: React.FC<Props> = ({ isOpen, onClose, students,
                            type="text"
                            placeholder="Nouvelle classe"
                            value={classMappings[cls] || ''}
-                           onChange={e => setClassMappings({...classMappings, [cls]: e.target.value.toUpperCase()})}
+                           onChange={e => setClassMappings({...classMappings, [cls as string]: e.target.value.toUpperCase()})}
                            className="w-1/2 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-slate-500 text-sm font-medium uppercase"
                         />
                       </div>

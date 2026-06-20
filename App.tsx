@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { Student, ColumnDefinition } from './types';
@@ -47,6 +47,19 @@ export default function App() {
   const [isRolloverOpen, setIsRolloverOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+        setIsSettingsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Load Data from Firebase
   useEffect(() => {
@@ -201,7 +214,7 @@ export default function App() {
               <p className="text-slate-400 mt-2 font-medium">Plateforme Cloud de Gestion des Licenciés</p>
             </div>
             
-            <div className="flex items-center gap-3 bg-slate-800 p-2 rounded-lg border border-slate-700">
+            <div className="flex items-center gap-3 bg-slate-800 p-2 rounded-lg border border-slate-700 relative" ref={settingsRef}>
               <CalendarDays className="w-5 h-5 text-slate-400 ml-2" />
               <select 
                 className="bg-transparent text-white font-semibold py-1 pr-4 pl-1 outline-none appearance-none cursor-pointer"
@@ -215,6 +228,31 @@ export default function App() {
                   <option key={year} value={year} className="text-slate-900">{year}</option>
                 ))}
               </select>
+
+              <div className="h-5 w-px bg-slate-700 mx-1"></div>
+
+              <button 
+                onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-slate-700 transition-colors focus:outline-none"
+              >
+                 <Settings2 className="w-4 h-4" />
+              </button>
+
+              {isSettingsOpen && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-200">
+                  <button 
+                    disabled={selectedIds.size === 0}
+                    onClick={() => {
+                      setIsRolloverOpen(true);
+                      setIsSettingsOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left"
+                  >
+                    <ArrowRightLeft className="w-4 h-4 text-slate-500" />
+                    Transition classe supérieure
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -303,18 +341,6 @@ export default function App() {
             >
               <Printer className="w-4 h-4" /> Imprimer
             </button>
-            
-            {/* Bulk Actions Dropdown Trigger (simulated via horizontal buttons for quick access) */}
-            <div className="h-8 w-px bg-slate-200 mx-1 hidden sm:block"></div>
-            
-            <button
-               disabled={selectedIds.size === 0}
-               onClick={() => { setIsRolloverOpen(true); }}
-               className="text-amber-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
-               title="Mettre à jour l'année et les profils"
-            >
-               <CalendarDays className="w-5 h-5" /> Changer d'année
-            </button>
           </div>
         </div>
 
@@ -339,6 +365,7 @@ export default function App() {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         activeYear={activeYear}
+        students={students}
         onSuccess={() => {
           // Success handled in the component (alerts or just closes)
         }}
