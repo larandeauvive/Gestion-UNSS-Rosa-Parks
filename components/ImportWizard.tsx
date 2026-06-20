@@ -154,7 +154,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
   const handleSaveAdd = async () => {
     setIsProcessing(true);
     try {
-      const batch = writeBatch(db);
+      let batch = writeBatch(db);
       let count = 0;
       
       for (const student of previewAddData) {
@@ -164,6 +164,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
         
         if (count % 499 === 0) {
           await batch.commit();
+          batch = writeBatch(db);
         }
       }
       
@@ -183,7 +184,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
   const handleSaveUpdate = async () => {
     setIsProcessing(true);
     try {
-      const batch = writeBatch(db);
+      let batch = writeBatch(db);
       let count = 0;
       
       for (const update of previewUpdateData) {
@@ -193,6 +194,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
         
         if (count % 499 === 0) {
           await batch.commit();
+          batch = writeBatch(db);
         }
       }
       
