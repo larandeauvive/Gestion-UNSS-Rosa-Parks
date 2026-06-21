@@ -38,7 +38,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
   const [step, setStep] = useState<1 | 2>(1);
   const [parsedData, setParsedData] = useState<any[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [previewAddData, setPreviewAddData] = useState<Omit<Student, 'id'>[]>([]);
+  const [importRecords, setImportRecords] = useState<{ student: Omit<Student, 'id'>, isDuplicate: boolean, selected: boolean }[]>([]);
   const [previewUpdateData, setPreviewUpdateData] = useState<{ id: string, licenseNumber: string, originalStudent: Student }[]>([]);
 
   const [targetClass, setTargetClass] = useState('');
@@ -61,7 +61,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
   const processPronote = () => {
     setIsProcessing(true);
     
-    const parsedStudents: Omit<Student, 'id'>[] = parsedData.map(row => {
+    const parsedStudents: { student: Omit<Student, 'id'>, isDuplicate: boolean, selected: boolean }[] = parsedData.map(row => {
       const el = row['Élèves'] || row['Eleves'] || row['Nom Prénom'] || '';
       
       const parts = el.trim().split(/\s+/);
@@ -81,25 +81,39 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
       }
 
       const extractedClass = (row['Classe de rattachement'] || row['Classe'] || '').toUpperCase();
+      const lastName = lastNameParts.join(' ').toUpperCase();
+      const firstName = firstNameParts.join(' ');
+
+      const isDuplicate = students.some(s => 
+        s.schoolYear === activeYear && 
+        normalizeStr(s.lastName) === normalizeStr(lastName) && 
+        normalizeStr(s.firstName) === normalizeStr(firstName)
+      );
 
       return {
-        lastName: lastNameParts.join(' ').toUpperCase(),
-        firstName: firstNameParts.join(' '),
-        birthDate: row['Né(e) le'] || row['Date de naissance'] || '',
-        classGroup: targetClass || extractedClass,
-        schoolYear: activeYear,
-        licenseNumber: '',
-        paid: 'NON',
-        amount: '',
-        paymentMethod: '',
-        parentalAuth: '',
-        imageRights: '',
-        tshirt: '',
-        size: ''
+        student: {
+          lastName,
+          firstName,
+          birthDate: row['Né(e) le'] || row['Date de naissance'] || '',
+          classGroup: targetClass || extractedClass,
+          schoolYear: activeYear,
+          licenseNumber: '',
+          paid: 'NON',
+          amount: '',
+          paymentMethod: '',
+          parentalAuth: '',
+          imageRights: '',
+          tshirt: '',
+          size: '',
+          gender: row['Sexe'] || row['Genre'] || '',
+          swimmingCertificate: 'NON'
+        },
+        isDuplicate,
+        selected: !isDuplicate // Do not select duplicates by default
       };
-    }).filter(s => s.lastName);
+    }).filter(s => s.student.lastName);
 
-    setPreviewAddData(parsedStudents);
+    setImportRecords(parsedStudents);
     setStep(2);
     setIsProcessing(false);
   };
@@ -157,7 +171,9 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
       let batch = writeBatch(db);
       let count = 0;
       
-      for (const student of previewAddData) {
+      const recordsToImport = importRecords.filter(r => r.selected).map(r => r.student);
+
+      for (const student of recordsToImport) {
         const docRef = doc(collection(db, "students"));
         batch.set(docRef, student);
         count++;
@@ -320,7 +336,10 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                 <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Check className="w-5 h-5" />
-                    <span className="font-medium">Prêt à importer {previewAddData.length} élèves.</span>
+                    <span className="font-medium">
+                      Prêt à importer {importRecords.filter(r => r.selected).length} sur {importRecords.length} élèves détectés.
+                      {importRecords.some(r => r.isDuplicate) && " Les doublons potentiels ont été ignorés par défaut."}
+                    </span>
                   </div>
                 </div>
 
@@ -328,6 +347,18 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                   <table className="w-full text-sm text-left">
                     <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-semibold sticky top-0 border-b border-slate-200">
                       <tr>
+                        <th className="px-4 py-3">
+                          <input 
+                            type="checkbox" 
+                            className="rounded border-slate-300"
+                            checked={importRecords.length > 0 && importRecords.every(r => r.selected)}
+                            onChange={e => {
+                               const checked = e.target.checked;
+                               setImportRecords(records => records.map(r => ({...r, selected: checked})));
+                            }}
+                          />
+                        </th>
+                        <th className="px-4 py-3">État</th>
                         <th className="px-4 py-3">Nom</th>
                         <th className="px-4 py-3">Prénom</th>
                         <th className="px-4 py-3">Date de Naissance</th>
@@ -335,21 +366,38 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {previewAddData.slice(0, 50).map((s, i) => (
-                        <tr key={i} className="hover:bg-slate-50">
-                          <td className="px-4 py-2 font-medium text-slate-900">{s.lastName}</td>
-                          <td className="px-4 py-2">{s.firstName}</td>
-                          <td className="px-4 py-2 text-slate-500">{s.birthDate}</td>
-                          <td className="px-4 py-2 font-medium">{s.classGroup}</td>
+                      {importRecords.map((r, i) => (
+                        <tr key={i} className={`hover:bg-slate-50 ${r.isDuplicate && !r.selected ? 'opacity-50' : ''}`}>
+                          <td className="px-4 py-2">
+                             <input 
+                               type="checkbox" 
+                               checked={r.selected}
+                               onChange={e => {
+                                  const checked = e.target.checked;
+                                  setImportRecords(records => {
+                                      const newRecords = [...records];
+                                      newRecords[i] = {...newRecords[i], selected: checked};
+                                      return newRecords;
+                                  });
+                               }}
+                               className="rounded border-slate-300" 
+                             />
+                          </td>
+                          <td className="px-4 py-2 font-medium">
+                             {r.isDuplicate ? (
+                                <span className="text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-xs">Existant</span>
+                             ) : (
+                                <span className="text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-xs">Nouveau</span>
+                             )}
+                          </td>
+                          <td className="px-4 py-2 font-medium text-slate-900">{r.student.lastName}</td>
+                          <td className="px-4 py-2">{r.student.firstName}</td>
+                          <td className="px-4 py-2 text-slate-500">{r.student.birthDate}</td>
+                          <td className="px-4 py-2 font-medium">{r.student.classGroup}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {previewAddData.length > 50 && (
-                    <div className="p-3 text-center text-xs text-slate-500 bg-slate-50 border-t border-slate-100">
-                      Affichage des 50 premiers résultats sur {previewAddData.length}.
-                    </div>
-                  )}
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
@@ -358,7 +406,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                   </button>
                   <button 
                     onClick={handleSaveAdd} 
-                    disabled={isProcessing}
+                    disabled={isProcessing || importRecords.filter(r => r.selected).length === 0}
                     className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white font-medium hover:bg-slate-800 rounded-xl transition-all disabled:opacity-50"
                   >
                     {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Student } from '../types';
-import { X, Save, FileEdit } from 'lucide-react';
-import { doc, updateDoc } from 'firebase/firestore';
+import { X, Save, FileEdit, Trash2 } from 'lucide-react';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 interface EditStudentModalProps {
@@ -50,6 +50,21 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
     } catch (e) {
       console.error(e);
       alert('Erreur lors de la mise à jour.');
+    }
+    setIsSaving(false);
+  };
+
+  const handleDelete = async () => {
+    if (!student || !window.confirm("Êtes-vous sûr de vouloir supprimer cet élève ? Cette action est irréversible.")) return;
+    setIsSaving(true);
+    try {
+      const docRef = doc(db, 'students', student.id);
+      await deleteDoc(docRef);
+      onSuccess();
+      onClose();
+    } catch (e) {
+      console.error(e);
+      alert('Erreur lors de la suppression.');
     }
     setIsSaving(false);
   };
@@ -227,21 +242,32 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
               </div>
            </div>
 
-           <div className="flex justify-end gap-3 pt-6 mt-6 border-t border-slate-100">
+           <div className="flex justify-between gap-3 pt-6 mt-6 border-t border-slate-100">
              <button
                type="button"
-               onClick={onClose}
-               className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors"
-             >
-               Annuler
-             </button>
-             <button
-               type="submit"
+               onClick={handleDelete}
+               className="flex items-center gap-2 px-5 py-2.5 text-rose-600 font-medium hover:bg-rose-50 rounded-xl transition-colors"
                disabled={isSaving}
-               className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white font-medium hover:bg-slate-800 rounded-xl transition-all disabled:opacity-50"
              >
-               {isSaving ? 'Enregistrement...' : <><Save className="w-4 h-4" /> Enregistrer</>}
+               <Trash2 className="w-4 h-4" /> Supprimer
              </button>
+             <div className="flex gap-3">
+               <button
+                 type="button"
+                 onClick={onClose}
+                 className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors"
+                 disabled={isSaving}
+               >
+                 Annuler
+               </button>
+               <button
+                 type="submit"
+                 disabled={isSaving}
+                 className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white font-medium hover:bg-slate-800 rounded-xl transition-all disabled:opacity-50"
+               >
+                 {isSaving ? 'Enregistrement...' : <><Save className="w-4 h-4" /> Enregistrer</>}
+               </button>
+             </div>
            </div>
         </form>
       </div>
