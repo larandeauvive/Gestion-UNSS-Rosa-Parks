@@ -7,9 +7,10 @@ import { Activity, Users, Trophy, TrendingUp } from 'lucide-react';
 interface Props {
   students: Student[];
   activeYear: string;
+  onNewConvocation: () => void;
 }
 
-export const Dashboard: React.FC<Props> = ({ students, activeYear }) => {
+export const Dashboard: React.FC<Props> = ({ students, activeYear, onNewConvocation }) => {
   const [convocations, setConvocations] = useState<Convocation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,6 +22,9 @@ export const Dashboard: React.FC<Props> = ({ students, activeYear }) => {
         data.push({ id: d.id, ...d.data() } as Convocation);
       });
       setConvocations(data);
+      setLoading(false);
+    }, (error) => {
+      console.error("Dashboard onSnapshot error", error);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -68,7 +72,17 @@ export const Dashboard: React.FC<Props> = ({ students, activeYear }) => {
     <div className="space-y-6">
       
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <button 
+          onClick={onNewConvocation}
+          className="bg-slate-900 text-white p-5 rounded-xl shadow-sm flex flex-col items-center justify-center gap-3 hover:bg-slate-800 transition-colors group"
+        >
+          <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+            <span className="text-2xl font-bold">+</span>
+          </div>
+          <span className="font-semibold text-sm">Nouvelle Convocation</span>
+        </button>
+
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
           <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center">
             <Trophy className="w-6 h-6" />

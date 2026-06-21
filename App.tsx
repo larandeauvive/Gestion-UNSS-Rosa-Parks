@@ -39,9 +39,10 @@ export default function App() {
   
   // View State
   const [activeYear, setActiveYear] = useState<string>('2025-2026');
-  const [currentTab, setCurrentTab] = useState<'eleves'|'convocations'|'dashboard'>('eleves');
+  const [currentTab, setCurrentTab] = useState<'eleves'|'convocations'|'dashboard'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
+  const [autoCreateConvocation, setAutoCreateConvocation] = useState(false);
   
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -147,6 +148,33 @@ export default function App() {
 
   const handleImport = async () => {
     setIsImportModalOpen(true);
+  };
+
+  const exportFiltered = (filterType: 'valid' | 'incomplete') => {
+    let ids: string[] = [];
+    if (filterType === 'valid') {
+       ids = filteredStudents
+         .filter(s => s.licenseNumber && String(s.paid).toUpperCase() === 'OUI' && String(s.parentalAuth).toUpperCase() === 'OUI')
+         .map(s => s.id);
+    } else {
+       ids = filteredStudents
+         .filter(s => {
+            const isPaid = String(s.paid).toUpperCase() === 'OUI';
+            const isAuth = String(s.parentalAuth).toUpperCase() === 'OUI';
+            const isValid = !!s.licenseNumber && isPaid && isAuth;
+            return (isPaid || isAuth) && !isValid;
+         })
+         .map(s => s.id);
+    }
+    
+    if (ids.length === 0) {
+      alert("Aucun élève ne correspond à ce filtre.");
+      return;
+    }
+    
+    setSelectedIds(new Set(ids));
+    setExportType('csv');
+    setIsExportModalOpen(true);
   };
 
   const executeExport = (selectedColumnKeys: string[]) => {
@@ -269,6 +297,12 @@ export default function App() {
         {/* Navigation Tabs */}
         <div className="max-w-7xl mx-auto px-6 mt-8 flex gap-6 border-b border-slate-700">
           <button 
+            onClick={() => setCurrentTab('dashboard')}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'dashboard' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+          >
+            Tableau de Bord
+          </button>
+          <button 
             onClick={() => setCurrentTab('eleves')}
             className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'eleves' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
           >
@@ -279,12 +313,6 @@ export default function App() {
             className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'convocations' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
           >
             Gestion des Convocations
-          </button>
-          <button 
-            onClick={() => setCurrentTab('dashboard')}
-            className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'dashboard' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
-          >
-            Tableau de Bord
           </button>
         </div>
       </header>
@@ -359,6 +387,21 @@ export default function App() {
                 <div className="text-sm font-medium text-slate-500 mr-2">
                    {selectedIds.size} sélectionné(s)
                 </div>
+
+                <div className="flex gap-2 mr-2 border-r border-slate-200 pr-4">
+                  <button 
+                    onClick={() => exportFiltered('valid')}
+                    className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-lg hover:bg-emerald-100 transition shadow-sm font-medium text-xs sm:text-sm"
+                  >
+                    Valides (CSV)
+                  </button>
+                  <button 
+                    onClick={() => exportFiltered('incomplete')}
+                    className="flex items-center gap-2 bg-amber-50 text-amber-700 border border-amber-200 px-3 py-2 rounded-lg hover:bg-amber-100 transition shadow-sm font-medium text-xs sm:text-sm"
+                  >
+                    Incomplètes (CSV)
+                  </button>
+                </div>
                 
                 <button 
                   disabled={selectedIds.size === 0}
@@ -398,6 +441,8 @@ export default function App() {
           <ConvocationManager 
             students={students.filter(s => s.schoolYear === activeYear)} 
             activeYear={activeYear} 
+            autoCreateNew={autoCreateConvocation}
+            onAutoCreateConsumed={() => setAutoCreateConvocation(false)}
           />
         )}
 
@@ -405,6 +450,10 @@ export default function App() {
           <Dashboard 
             students={students} 
             activeYear={activeYear} 
+            onNewConvocation={() => {
+              setCurrentTab('convocations');
+              setAutoCreateConvocation(true);
+            }}
           />
         )}
       </main>

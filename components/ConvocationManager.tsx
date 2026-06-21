@@ -7,9 +7,11 @@ import { PlusCircle, Trash2, Printer, Search, X, Save, Edit3, ChevronRight } fro
 interface Props {
   students: Student[];
   activeYear: string;
+  autoCreateNew?: boolean;
+  onAutoCreateConsumed?: () => void;
 }
 
-export const ConvocationManager: React.FC<Props> = ({ students, activeYear }) => {
+export const ConvocationManager: React.FC<Props> = ({ students, activeYear, autoCreateNew, onAutoCreateConsumed }) => {
   const [convocations, setConvocations] = useState<Convocation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -20,6 +22,13 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear }) =>
   const [formData, setFormData] = useState<Partial<Convocation>>({});
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    if (autoCreateNew) {
+      handleCreateNew();
+      if (onAutoCreateConsumed) onAutoCreateConsumed();
+    }
+  }, [autoCreateNew, onAutoCreateConsumed]);
 
   useEffect(() => {
     const q = query(collection(db, 'convocations'), where('schoolYear', '==', activeYear));

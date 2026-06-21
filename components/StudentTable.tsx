@@ -78,7 +78,13 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                           <span className="font-medium text-slate-900 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
                              {student[col.key as string]}
                           </span>
-                        ) : col.key === 'lastName' || col.key === 'firstName' ? (
+                        ) : col.key === 'lastName' ? (
+                           <div className="flex items-center gap-1.5">
+                             {String(student.swimmingCertificate).toUpperCase() === 'NON' && <span title="Savoir nager non validé" className="text-base">🏊‍♂️🚫</span>}
+                             {String(student.imageRights).toUpperCase() === 'NON' && <span title="Droit à l'image non validé" className="text-base">📷🚫</span>}
+                             <span className="font-semibold text-slate-900">{student[col.key as string]}</span>
+                           </div>
+                        ) : col.key === 'firstName' ? (
                            <span className="font-semibold text-slate-900">{student[col.key as string]}</span>
                         ) : (
                           student[col.key as string]
