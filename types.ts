@@ -43,6 +43,8 @@ export interface Convocation {
   needPicnic: string; // OUI/NON
   schoolYear: string; 
   studentIds: string[]; // Liste des IDs des élèves
+  tshirtManagerId?: string;
+  snackManagerIds?: string[];
 }
 
 export interface ColumnDefinition {

@@ -85,8 +85,16 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      let tshirtManagerId = formData.tshirtManagerId;
+      if (tshirtManagerId && !selectedStudentIds.has(tshirtManagerId)) {
+         tshirtManagerId = ''; // Clear if not selected anymore
+      }
+      const snackManagerIds = (formData.snackManagerIds || []).filter(id => selectedStudentIds.has(id));
+
       const dataToSave = {
         ...formData,
+        tshirtManagerId,
+        snackManagerIds,
         studentIds: Array.from(selectedStudentIds),
         schoolYear: activeYear
       };
@@ -141,6 +149,16 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
              </span>
           </div>
         </div>
+
+        ${(conv.tshirtManagerId || (conv.snackManagerIds?.length || 0) > 0) ? `
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 15px; border-radius: 8px; margin-bottom: 30px;">
+            <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #166534; text-transform: uppercase;">Responsabilités Élèves</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              ${conv.tshirtManagerId ? `<div><strong style="color: #166534;">Maillots :</strong> ${students.find(s => s.id === conv.tshirtManagerId)?.lastName || ''} ${students.find(s => s.id === conv.tshirtManagerId)?.firstName || ''}</div>` : ''}
+              ${(conv.snackManagerIds?.length || 0) > 0 ? `<div><strong style="color: #166534;">Goûter/Pique-Nique :</strong> ${conv.snackManagerIds!.map(id => students.find(s => s.id === id)?.lastName).join(', ')}</div>` : ''}
+            </div>
+          </div>
+        ` : ''}
         
         <h3 style="margin-bottom: 10px;">Liste des ${convStudents.length} élèves convoqués</h3>
         <table>
@@ -148,6 +166,7 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
             <tr>
               <th>Nom / Prénom</th>
               <th>Classe</th>
+              <th>N° Licence</th>
               <th>Taille Maillot</th>
               <th>Savoir Nager</th>
               <th>Autorisations.</th>
@@ -160,6 +179,7 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
               <tr>
                 <td style="font-weight: bold;">${s.lastName} ${s.firstName}</td>
                 <td>${s.classGroup}</td>
+                <td style="text-align: center; font-family: monospace;">${s.licenseNumber || '-'}</td>
                 <td style="text-align: center;">${s.size || '-'}</td>
                 <td style="text-align: center;">${s.swimmingCertificate === 'OUI' ? '✓' : '✗'}</td>
                 <td style="text-align: center;">${s.parentalAuth === 'OUI' ? '✓' : '✗'}</td>
@@ -171,6 +191,78 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
         </table>
         
         <div style="margin-top: 50px; text-align: center; font-size: 12px; color: #64748b;">
+           Généré le ${new Date().toLocaleDateString('fr-FR')} - AS Rosa Parks
+        </div>
+        </body></html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+  };
+
+  const handlePrintEleves = (conv: Convocation) => {
+    const convStudents = students.filter(s => conv.studentIds?.includes(s.id));
+    // Sort students by class, then by last name
+    convStudents.sort((a,b) => {
+      const classCmp = (a.classGroup || '').localeCompare(b.classGroup || '');
+      if (classCmp !== 0) return classCmp;
+      return (a.lastName || '').localeCompare(b.lastName || '');
+    });
+
+    const printWindow = window.open('', '', 'height=800,width=800');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html><head><title>Convocation Élèves - ${conv.competitionName}</title>
+        <style>
+          body { font-family: sans-serif; padding: 20px; color: #1e293b; line-height: 1.5; }
+          .header { text-align: center; border-bottom: 2px solid #slate-900; padding-bottom: 20px; margin-bottom: 30px; }
+          h1 { margin: 0 0 10px 0; font-size: 24px; color: #0f172a; }
+          .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px; background: #f8fafc; padding: 15px; border-radius: 8px;}
+          .meta-item strong { display: block; font-size: 12px; color: #64748b; text-transform: uppercase; }
+          .meta-item span { font-size: 16px; font-weight: bold; }
+          table { width: 100%; border-collapse: collapse; font-size: 16px; margin-top: 20px;}
+          th, td { border: 1px solid #cbd5e1; padding: 12px; text-align: left; }
+          th { background-color: #f1f5f9; font-weight: bold; text-transform: uppercase; font-size: 14px; }
+          tr:nth-child(even) { background-color: #f8fafc; }
+        </style></head><body>
+        <div class="header">
+          <h1>AS Rosa Parks - Liste Élèves Convoqués</h1>
+          <p style="margin:0; font-weight: bold; color: #475569; font-size: 18px;">${conv.competitionName}</p>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-item"><strong>Départ</strong><span>${new Date(conv.departureDate).toLocaleString('fr-FR', {dateStyle:'full', timeStyle:'short'})}</span></div>
+          <div class="meta-item"><strong>Retour</strong><span>${new Date(conv.returnDate).toLocaleString('fr-FR', {dateStyle:'full', timeStyle:'short'})}</span></div>
+          <div class="meta-item"><strong>Accompagnateurs</strong><span>${conv.guides || 'Aucun'}</span></div>
+          <div class="meta-item">
+             <strong>À prévoir</strong>
+             <span style="font-size: 14px; font-weight: normal;">
+               ${conv.needSnack === 'OUI' ? 'Goûter : OUI<br>' : ''}
+               ${conv.needPicnic === 'OUI' ? 'Pique-nique : OUI' : ''}
+             </span>
+          </div>
+        </div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 40%;">Nom</th>
+              <th style="width: 40%;">Prénom</th>
+              <th style="width: 20%; text-align: center;">Classe</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${convStudents.map(s => `
+              <tr>
+                <td style="font-weight: bold;">${s.lastName}</td>
+                <td>${s.firstName}</td>
+                <td style="font-weight: bold; text-align: center;">${s.classGroup}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        
+        <div style="margin-top: 40px; font-size: 12px; color: #64748b; text-align: center;">
            Généré le ${new Date().toLocaleDateString('fr-FR')} - AS Rosa Parks
         </div>
         </body></html>
@@ -195,6 +287,44 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
            (s.firstName || '').toLowerCase().includes(searchLower) ||
            (s.classGroup || '').toLowerCase().includes(searchLower);
   });
+
+  const managerCounts = React.useMemo(() => {
+    const counts: Record<string, { tshirt: number; snack: number }> = {};
+    students.forEach(s => counts[s.id] = { tshirt: 0, snack: 0 });
+    convocations.forEach(c => {
+      if (c.tshirtManagerId && counts[c.tshirtManagerId]) {
+         counts[c.tshirtManagerId].tshirt++;
+      }
+      if (c.snackManagerIds) {
+         c.snackManagerIds.forEach(mId => {
+            if (counts[mId]) counts[mId].snack++;
+         });
+      }
+    });
+
+    if (activeConvocation) {
+       if (activeConvocation.tshirtManagerId && counts[activeConvocation.tshirtManagerId]) {
+          counts[activeConvocation.tshirtManagerId].tshirt--;
+       }
+       if (activeConvocation.snackManagerIds) {
+          activeConvocation.snackManagerIds.forEach(mId => {
+             if (counts[mId]) counts[mId].snack--;
+          });
+       }
+    }
+    return counts;
+  }, [students, convocations, activeConvocation]);
+
+  const toggleSnackManager = (id: string) => {
+    const current = new Set(formData.snackManagerIds || []);
+    if (current.has(id)) {
+       current.delete(id);
+    } else {
+       if (current.size >= 2) return; // Max 2
+       current.add(id);
+    }
+    setFormData({...formData, snackManagerIds: Array.from(current)});
+  };
 
   return (
     <div className="flex gap-6 min-h-[600px] h-full">
@@ -269,7 +399,8 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
                  </div>
                  <div className="flex gap-3">
                    <button onClick={() => handleEdit(activeConvocation)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-xl hover:bg-slate-200 transition-colors"><Edit3 className="w-4 h-4" /> Modifier</button>
-                   <button onClick={() => handlePrint(activeConvocation)} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 transition-colors"><Printer className="w-4 h-4" /> Imprimer</button>
+                   <button onClick={() => handlePrintEleves(activeConvocation)} className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 font-medium rounded-xl hover:bg-indigo-100 transition-colors"><Printer className="w-4 h-4" /> Impression Élèves</button>
+                   <button onClick={() => handlePrint(activeConvocation)} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white font-medium rounded-xl hover:bg-slate-800 transition-colors"><Printer className="w-4 h-4" /> Impression Prof</button>
                  </div>
               </div>
               <div className="p-6 flex-1 overflow-y-auto">
@@ -288,6 +419,33 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
                       <p className="font-bold text-slate-900 mt-1">{activeConvocation.needPicnic}</p>
                     </div>
                  </div>
+
+                 {(activeConvocation.tshirtManagerId || (activeConvocation.snackManagerIds?.length || 0) > 0) && (
+                   <div className="mb-8">
+                     <h3 className="font-bold text-slate-900 mb-4 border-b border-slate-100 pb-2">Responsabilités Éleves</h3>
+                     <div className="grid grid-cols-2 gap-4">
+                        {activeConvocation.tshirtManagerId && (
+                           <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+                             <div className="text-emerald-800 text-xs font-bold uppercase mb-1">Responsable Maillots</div>
+                             <div className="font-semibold text-emerald-900">
+                               {students.find(s => s.id === activeConvocation.tshirtManagerId)?.lastName} {students.find(s => s.id === activeConvocation.tshirtManagerId)?.firstName}
+                             </div>
+                           </div>
+                        )}
+                        {(activeConvocation.snackManagerIds?.length || 0) > 0 && (
+                           <div className="bg-amber-50 p-3 rounded-xl border border-amber-200">
+                             <div className="text-amber-800 text-xs font-bold uppercase mb-1">Responsable(s) Pique-Nique/Goûter</div>
+                             <div className="font-semibold text-amber-900">
+                               {activeConvocation.snackManagerIds?.map(id => {
+                                 const sc = students.find(s => s.id === id);
+                                 return sc ? `${sc.lastName} ${sc.firstName}` : '';
+                               }).join(', ')}
+                             </div>
+                           </div>
+                        )}
+                     </div>
+                   </div>
+                 )}
 
                  <h3 className="font-bold text-slate-900 mb-4 border-b border-slate-100 pb-2 flex justify-between">
                    <span>Élèves Convoqués ({(activeConvocation.studentIds || []).length})</span>
@@ -406,6 +564,59 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
                      </div>
                   </div>
                 </div>
+
+                {selectedStudentIds.size > 0 && (
+                  <div className="border-t border-slate-100 pt-6">
+                    <h3 className="block text-sm font-semibold text-slate-700 mb-4">Désignation des responsabilités</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      
+                      <div className="border border-slate-200 rounded-xl p-4 bg-emerald-50/30">
+                        <label className="block text-sm font-semibold text-emerald-800 mb-2 whitespace-nowrap">👕 Responsable Maillots</label>
+                        <select 
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-sm"
+                          value={formData.tshirtManagerId || ''}
+                          onChange={e => setFormData({...formData, tshirtManagerId: e.target.value})}
+                        >
+                           <option value="">Aucun</option>
+                           {students.filter(s => selectedStudentIds.has(s.id)).map(s => (
+                             <option key={`tshirt_${s.id}`} value={s.id}>
+                               {s.lastName} {s.firstName} {managerCounts[s.id]?.tshirt > 0 ? `(Désigné ${managerCounts[s.id].tshirt} fois)` : '(Jamais)'}
+                             </option>
+                           ))}
+                        </select>
+                      </div>
+
+                      <div className="border border-slate-200 rounded-xl p-4 bg-amber-50/30">
+                        <div className="flex justify-between items-end mb-2">
+                          <label className="block text-sm font-semibold text-amber-800 whitespace-nowrap">🥪 Resp. Pique-Nique/Goûter</label>
+                          <span className="text-xs text-amber-600 font-medium">Max 2</span>
+                        </div>
+                        <div className="h-[120px] overflow-y-auto border border-slate-200 rounded-lg bg-white p-2 text-sm space-y-1">
+                           {students.filter(s => selectedStudentIds.has(s.id)).map(s => {
+                             const isSelected = (formData.snackManagerIds || []).includes(s.id);
+                             const maxReached = !isSelected && (formData.snackManagerIds || []).length >= 2;
+                             return (
+                               <label key={`snack_${s.id}`} className={`flex items-center gap-2 p-1.5 rounded-md cursor-pointer transition-colors ${isSelected ? 'bg-amber-100' : 'hover:bg-slate-50'} ${maxReached ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                 <input 
+                                   type="checkbox" 
+                                   checked={isSelected} 
+                                   disabled={maxReached}
+                                   onChange={() => toggleSnackManager(s.id)} 
+                                   className="rounded text-amber-600 focus:ring-amber-500 border-slate-300"
+                                 />
+                                 <span className="truncate flex-1">{s.lastName} {s.firstName}</span>
+                                 <span className="text-xs text-slate-500 bg-slate-100 px-1.5 rounded shrink-0">
+                                   {managerCounts[s.id]?.snack > 0 ? `${managerCounts[s.id].snack} fois` : 'Jamais'}
+                                 </span>
+                               </label>
+                             );
+                           })}
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
 
               </div>
            </form>
