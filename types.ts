@@ -3,6 +3,7 @@ export interface Student {
   lastName: string; // Nom
   firstName: string; // Prénom
   classGroup: string; // Classe
+  gender?: string; // Sexe (F/G)
   schoolYear: string; // Année scolaire
   licenseNumber: string; // N° Licence
   paid: string; // Payé (OUI/NON)
@@ -30,6 +31,18 @@ export interface CsvRow {
   "Droit à l'image": string;
   "T-shirt": string;
   "Taille": string;
+}
+
+export interface Convocation {
+  id: string;
+  competitionName: string;
+  departureDate: string;
+  returnDate: string;
+  guides: string; // accompagnateurs
+  needSnack: string; // OUI/NON
+  needPicnic: string; // OUI/NON
+  schoolYear: string; 
+  studentIds: string[]; // Liste des IDs des élèves
 }
 
 export interface ColumnDefinition {

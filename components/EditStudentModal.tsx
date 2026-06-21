@@ -43,6 +43,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
         swimmingCertificate: formData.swimmingCertificate || 'NON',
         parentalAuth: formData.parentalAuth || 'NON',
         imageRights: formData.imageRights || 'NON',
+        gender: formData.gender || '',
       });
       onSuccess();
       onClose();
@@ -73,6 +74,25 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
 
         <form onSubmit={handleSubmit} className="p-6">
            <div className="space-y-6">
+
+              {/* Profil Info */}
+              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                 <h3 className="font-bold text-slate-900 mb-4 text-sm uppercase tracking-wider">Profil</h3>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Sexe</label>
+                      <select 
+                        value={formData.gender || ''}
+                        onChange={e => setFormData({...formData, gender: e.target.value})}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium bg-white"
+                      >
+                        <option value="">Non renseigné</option>
+                        <option value="F">Fille (F)</option>
+                        <option value="G">Garçon (G)</option>
+                      </select>
+                    </div>
+                 </div>
+              </div>
               
               {/* Payment Info */}
               <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
@@ -134,10 +154,10 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
 
               {/* T-Shirt */}
               <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
-                 <h3 className="font-bold text-slate-900 mb-4 text-sm uppercase tracking-wider">T-Shirt</h3>
+                 <h3 className="font-bold text-slate-900 mb-4 text-sm uppercase tracking-wider">Maillot UNSS</h3>
                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Prend un T-shirt ?</label>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Prend un maillot ?</label>
                       <select 
                         value={formData.tshirt || 'NON'}
                         onChange={e => setFormData({...formData, tshirt: e.target.value})}
@@ -149,7 +169,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
                     </div>
                     {formData.tshirt === 'OUI' && (
                       <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">Taille</label>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Taille Maillot</label>
                         <select 
                           value={formData.size || ''}
                           onChange={e => setFormData({...formData, size: e.target.value})}

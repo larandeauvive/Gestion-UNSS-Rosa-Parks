@@ -9,6 +9,8 @@ import { StudentTable } from './components/StudentTable';
 import { ImportWizard } from './components/ImportWizard';
 import { YearRolloverWizard } from './components/YearRolloverWizard';
 import { EditStudentModal } from './components/EditStudentModal';
+import { ConvocationManager } from './components/ConvocationManager';
+import { Dashboard } from './components/Dashboard';
 import { importFromCSV } from './lib/importCsv';
 import { deleteMultipleStudents, updateMultipleStudents, addStudent } from './lib/db';
 
@@ -18,6 +20,7 @@ const INITIAL_COLUMNS: ColumnDefinition[] = [
   { key: 'birthDate', label: 'Né(e) le', visible: true },
   { key: 'classGroup', label: 'Classe', visible: true },
   { key: 'schoolYear', label: 'Année', visible: true },
+  { key: 'gender', label: 'Sexe', visible: true },
   { key: 'licenseNumber', label: 'N° Licence', visible: true },
   { key: 'paid', label: 'Payé', visible: true },
   { key: 'amount', label: 'Montant', visible: true },
@@ -26,8 +29,8 @@ const INITIAL_COLUMNS: ColumnDefinition[] = [
   { key: 'swimmingCertificate', label: 'Savoir Nager', visible: false },
   { key: 'parentalAuth', label: 'Auto. Parentale', visible: false },
   { key: 'imageRights', label: 'Droit Image', visible: false },
-  { key: 'tshirt', label: 'T-shirt', visible: true },
-  { key: 'size', label: 'Taille', visible: true },
+  { key: 'tshirt', label: 'Maillot', visible: true },
+  { key: 'size', label: 'Taille Maillot', visible: true },
 ];
 
 export default function App() {
@@ -36,6 +39,7 @@ export default function App() {
   
   // View State
   const [activeYear, setActiveYear] = useState<string>('2025-2026');
+  const [currentTab, setCurrentTab] = useState<'eleves'|'convocations'|'dashboard'>('eleves');
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
   
@@ -261,109 +265,148 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {/* Navigation Tabs */}
+        <div className="max-w-7xl mx-auto px-6 mt-8 flex gap-6 border-b border-slate-700">
+          <button 
+            onClick={() => setCurrentTab('eleves')}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'eleves' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+          >
+            Liste des Élèves
+          </button>
+          <button 
+            onClick={() => setCurrentTab('convocations')}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'convocations' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+          >
+            Gestion des Convocations
+          </button>
+          <button 
+            onClick={() => setCurrentTab('dashboard')}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'dashboard' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+          >
+            Tableau de Bord
+          </button>
+        </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 -mt-20 space-y-6">
+      <main className="max-w-7xl mx-auto px-6 -mt-10 space-y-6">
         
-        {/* Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard 
-            title="Total Inscrits" 
-            value={students.filter(s => s.schoolYear === activeYear).length} 
-            icon={<Users className="w-6 h-6 text-slate-900" />}
-            colorClass="bg-white text-slate-900 border-slate-200"
-          />
-          <StatCard 
-            title="Cotisations Validées" 
-            value={students.filter(s => s.schoolYear === activeYear && String(s.paid).toUpperCase() === 'OUI').length} 
-            icon={<CheckCircle className="w-6 h-6 text-emerald-600" />}
-            colorClass="bg-white text-emerald-600 border-slate-200"
-          />
-          <StatCard 
-            title="Résultats de Recherche" 
-            value={filteredStudents.length} 
-            icon={<Search className="w-6 h-6 text-indigo-600" />}
-            colorClass="bg-white text-indigo-600 border-slate-200"
-          />
-          
-          <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-col justify-center items-center gap-2">
-             <button
-                onClick={handleImport}
-                disabled={isImporting}
-                className="w-full flex justify-center items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 rounded-lg font-medium transition-colors border border-slate-300 disabled:opacity-50"
-              >
-                {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-                Assistant d'Importation
-              </button>
-             <p className="text-xs text-slate-400 text-center">Ajouter ou croiser des données CSV</p>
-          </div>
-        </div>
-
-        {/* Toolbar */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col lg:flex-row gap-4 items-center justify-between">
-          
-          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              <input 
-                type="text" 
-                placeholder="Chercher un nom..." 
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white transition-colors"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+        {currentTab === 'eleves' && (
+          <>
+            {/* Stats Row */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <StatCard 
+                title="Total Inscrits" 
+                value={students.filter(s => s.schoolYear === activeYear).length} 
+                icon={<Users className="w-6 h-6 text-slate-900" />}
+                colorClass="bg-white text-slate-900 border-slate-200"
               />
+              <StatCard 
+                title="Cotisations Validées" 
+                value={students.filter(s => s.schoolYear === activeYear && String(s.paid).toUpperCase() === 'OUI').length} 
+                icon={<CheckCircle className="w-6 h-6 text-emerald-600" />}
+                colorClass="bg-white text-emerald-600 border-slate-200"
+              />
+              <StatCard 
+                title="Résultats de Recherche" 
+                value={filteredStudents.length} 
+                icon={<Search className="w-6 h-6 text-indigo-600" />}
+                colorClass="bg-white text-indigo-600 border-slate-200"
+              />
+              
+              <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-col justify-center items-center gap-2">
+                 <button
+                    onClick={handleImport}
+                    disabled={isImporting}
+                    className="w-full flex justify-center items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 rounded-lg font-medium transition-colors border border-slate-300 disabled:opacity-50"
+                  >
+                    {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+                    Assistant d'Importation
+                  </button>
+                 <p className="text-xs text-slate-400 text-center">Ajouter ou croiser des données CSV</p>
+              </div>
             </div>
-            
-            <select 
-              className="w-full sm:w-48 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-900"
-              value={classFilter}
-              onChange={(e) => setClassFilter(e.target.value)}
-            >
-              <option value="">Toutes les classes</option>
-              {uniqueClasses.map(cls => (
-                <option key={cls} value={cls}>{cls}</option>
-              ))}
-            </select>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
-            <div className="text-sm font-medium text-slate-500 mr-2">
-               {selectedIds.size} sélectionné(s)
+            {/* Toolbar */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col lg:flex-row gap-4 items-center justify-between">
+              
+              <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input 
+                    type="text" 
+                    placeholder="Chercher un nom..." 
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white transition-colors"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                
+                <select 
+                  className="w-full sm:w-48 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  value={classFilter}
+                  onChange={(e) => setClassFilter(e.target.value)}
+                >
+                  <option value="">Toutes les classes</option>
+                  {uniqueClasses.map(cls => (
+                    <option key={cls} value={cls}>{cls}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+                <div className="text-sm font-medium text-slate-500 mr-2">
+                   {selectedIds.size} sélectionné(s)
+                </div>
+                
+                <button 
+                  disabled={selectedIds.size === 0}
+                  onClick={() => { setExportType('csv'); setIsExportModalOpen(true); }}
+                  className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-3 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Download className="w-4 h-4" /> CSV
+                </button>
+                <button 
+                  disabled={selectedIds.size === 0}
+                  onClick={() => { setExportType('print'); setIsExportModalOpen(true); }}
+                  className="flex items-center gap-2 bg-slate-900 text-white px-3 py-2 rounded-lg hover:bg-slate-800 transition shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Printer className="w-4 h-4" /> Imprimer
+                </button>
+              </div>
             </div>
+
+            {/* Data Table */}
+            <StudentTable 
+              students={filteredStudents}
+              columns={columns}
+              selectedIds={selectedIds}
+              onSelectAll={handleSelectAll}
+              onSelectRow={handleSelectRow}
+              onRowClick={(student) => setEditStudent(student)}
+            />
             
-            <button 
-              disabled={selectedIds.size === 0}
-              onClick={() => { setExportType('csv'); setIsExportModalOpen(true); }}
-              className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-3 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Download className="w-4 h-4" /> CSV
-            </button>
-            <button 
-              disabled={selectedIds.size === 0}
-              onClick={() => { setExportType('print'); setIsExportModalOpen(true); }}
-              className="flex items-center gap-2 bg-slate-900 text-white px-3 py-2 rounded-lg hover:bg-slate-800 transition shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Printer className="w-4 h-4" /> Imprimer
-            </button>
-          </div>
-        </div>
+            <div className="flex justify-between items-center text-xs text-slate-500 pt-2 pb-8">
+               <span>Affichage de {filteredStudents.length} élèves / Total de l'année : {students.filter(s => s.schoolYear === activeYear).length}</span>
+               <span>Base de données synchronisée</span>
+            </div>
+          </>
+        )}
 
-        {/* Data Table */}
-        <StudentTable 
-          students={filteredStudents}
-          columns={columns}
-          selectedIds={selectedIds}
-          onSelectAll={handleSelectAll}
-          onSelectRow={handleSelectRow}
-          onRowClick={(student) => setEditStudent(student)}
-        />
-        
-        <div className="flex justify-between items-center text-xs text-slate-500 pt-2 pb-8">
-           <span>Affichage de {filteredStudents.length} élèves / Total de l'année : {students.filter(s => s.schoolYear === activeYear).length}</span>
-           <span>Base de données synchronisée</span>
-        </div>
+        {currentTab === 'convocations' && (
+          <ConvocationManager 
+            students={students.filter(s => s.schoolYear === activeYear)} 
+            activeYear={activeYear} 
+          />
+        )}
 
+        {currentTab === 'dashboard' && (
+          <Dashboard 
+            students={students} 
+            activeYear={activeYear} 
+          />
+        )}
       </main>
 
       {/* Modals */}
