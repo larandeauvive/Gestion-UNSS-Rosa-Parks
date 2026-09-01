@@ -47,6 +47,17 @@ export interface Convocation {
   snackManagerIds?: string[];
 }
 
+export interface Session {
+  id: string;
+  date: string; // ISO date string
+  time: string; // Horaire (ex: "13:30")
+  requireLicense: boolean; // Obligation d'être à jour de sa licence
+  name: string; // Nom de la séance (ex: "Entraînement Mercredi")
+  schoolYear: string;
+  enrolledStudentIds: string[]; // Élèves inscrits
+  presentStudentIds: string[]; // Élèves pointés présents
+}
+
 export interface ColumnDefinition {
   key: keyof Student;
   label: string;

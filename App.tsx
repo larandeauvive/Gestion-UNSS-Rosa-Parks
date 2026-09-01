@@ -10,6 +10,8 @@ import { ImportWizard } from './components/ImportWizard';
 import { YearRolloverWizard } from './components/YearRolloverWizard';
 import { EditStudentModal } from './components/EditStudentModal';
 import { ConvocationManager } from './components/ConvocationManager';
+import { SessionManager } from './components/SessionManager';
+import { PublicEnrollment } from './components/PublicEnrollment';
 import { Dashboard } from './components/Dashboard';
 import { importFromCSV } from './lib/importCsv';
 import { deleteMultipleStudents, updateMultipleStudents, addStudent } from './lib/db';
@@ -37,9 +39,20 @@ export default function App() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Public Route state
+  const [enrollSessionId, setEnrollSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const session = params.get('enroll');
+    if (session) {
+      setEnrollSessionId(session);
+    }
+  }, []);
+  
   // View State
   const [activeYear, setActiveYear] = useState<string>('2025-2026');
-  const [currentTab, setCurrentTab] = useState<'eleves'|'convocations'|'dashboard'>('dashboard');
+  const [currentTab, setCurrentTab] = useState<'eleves'|'convocations'|'dashboard'|'seances'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [autoCreateConvocation, setAutoCreateConvocation] = useState(false);
@@ -145,6 +158,10 @@ export default function App() {
     else newSelected.add(id);
     setSelectedIds(newSelected);
   };
+
+  if (enrollSessionId) {
+    return <PublicEnrollment sessionId={enrollSessionId} />;
+  }
 
   const handleImport = async () => {
     setIsImportModalOpen(true);
@@ -314,6 +331,12 @@ export default function App() {
           >
             Gestion des Convocations
           </button>
+          <button 
+            onClick={() => setCurrentTab('seances')}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'seances' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+          >
+            Créneaux Hebdomadaires
+          </button>
         </div>
       </header>
 
@@ -454,6 +477,13 @@ export default function App() {
               setCurrentTab('convocations');
               setAutoCreateConvocation(true);
             }}
+          />
+        )}
+
+        {currentTab === 'seances' && (
+          <SessionManager 
+            students={students.filter(s => s.schoolYear === activeYear)}
+            activeYear={activeYear}
           />
         )}
       </main>
