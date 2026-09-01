@@ -85,19 +85,26 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      let tshirtManagerId = formData.tshirtManagerId;
+      let tshirtManagerId = formData.tshirtManagerId || null;
       if (tshirtManagerId && !selectedStudentIds.has(tshirtManagerId)) {
-         tshirtManagerId = ''; // Clear if not selected anymore
+         tshirtManagerId = null; // Clear if not selected anymore
       }
       const snackManagerIds = (formData.snackManagerIds || []).filter(id => selectedStudentIds.has(id));
 
-      const dataToSave = {
+      const dataToSave: any = {
         ...formData,
         tshirtManagerId,
         snackManagerIds,
         studentIds: Array.from(selectedStudentIds),
         schoolYear: activeYear
       };
+      
+      // Clean undefined values for Firestore
+      Object.keys(dataToSave).forEach(key => {
+        if (dataToSave[key] === undefined) {
+          delete dataToSave[key];
+        }
+      });
 
       if (activeConvocation) {
         await updateDoc(doc(db, 'convocations', activeConvocation.id), dataToSave);
