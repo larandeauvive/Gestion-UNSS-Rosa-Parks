@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { Student, ColumnDefinition } from './types';
-import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle } from 'lucide-react';
+import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut } from 'lucide-react';
 import { StatCard } from './components/StatCard';
 import { Modal } from './components/Modal';
 import { StudentTable } from './components/StudentTable';
@@ -12,6 +12,7 @@ import { EditStudentModal } from './components/EditStudentModal';
 import { ConvocationManager } from './components/ConvocationManager';
 import { SessionManager } from './components/SessionManager';
 import { PublicEnrollment } from './components/PublicEnrollment';
+import { LoginScreen } from './components/LoginScreen';
 import { Dashboard } from './components/Dashboard';
 import { importFromCSV } from './lib/importCsv';
 import { deleteMultipleStudents, updateMultipleStudents, addStudent } from './lib/db';
@@ -41,6 +42,11 @@ export default function App() {
   
   // Public Route state
   const [enrollSessionId, setEnrollSessionId] = useState<string | null>(null);
+
+  // Authentication State
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('as_auth') === 'true';
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -161,6 +167,13 @@ export default function App() {
 
   if (enrollSessionId) {
     return <PublicEnrollment sessionId={enrollSessionId} />;
+  }
+
+  if (!isAuthenticated) {
+    return <LoginScreen onLogin={() => {
+      localStorage.setItem('as_auth', 'true');
+      setIsAuthenticated(true);
+    }} />;
   }
 
   const handleImport = async () => {
@@ -288,8 +301,20 @@ export default function App() {
               <button 
                 onClick={() => setIsSettingsOpen(!isSettingsOpen)}
                 className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-slate-700 transition-colors focus:outline-none"
+                title="Paramètres"
               >
                  <Settings2 className="w-4 h-4" />
+              </button>
+
+              <button 
+                onClick={() => {
+                  localStorage.removeItem('as_auth');
+                  setIsAuthenticated(false);
+                }}
+                className="p-1.5 text-slate-400 hover:text-red-400 rounded-md hover:bg-slate-700 transition-colors focus:outline-none"
+                title="Déconnexion"
+              >
+                 <LogOut className="w-4 h-4" />
               </button>
 
               {isSettingsOpen && (
