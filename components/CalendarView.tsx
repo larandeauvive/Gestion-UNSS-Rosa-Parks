@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, addDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Convocation, Session, Student } from '../types';
 import { 
@@ -7,7 +7,7 @@ import {
   startOfWeek, endOfWeek, isSameMonth, isSameDay, eachDayOfInterval 
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, X, Printer, Users, FileText, Calendar as CalendarIcon, PlusCircle, Loader2, Share2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Printer, Users, FileText, Calendar as CalendarIcon, PlusCircle, Loader2, Share2, Trash2 } from 'lucide-react';
 
 interface Props {
   students: Student[];
@@ -148,6 +148,19 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
       alert('Erreur lors de la création de la séance.');
     } finally {
       setIsSavingEvent(false);
+    }
+  };
+
+  const handleDeleteEvent = async (event: CalendarEvent) => {
+    if (window.confirm(`Êtes-vous sûr de vouloir supprimer cet événement (${event.title}) ? Cette action est irréversible.`)) {
+      try {
+        const collectionName = event.type === 'session' ? 'sessions' : 'convocations';
+        await deleteDoc(doc(db, collectionName, event.id));
+        setSelectedEvent(null);
+      } catch (err) {
+        console.error(err);
+        alert('Erreur lors de la suppression de l\'événement.');
+      }
     }
   };
 
@@ -520,7 +533,19 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
               )}
             </div>
             
-            <div className="p-4 border-t border-slate-100 flex justify-end">
+            <div className="p-4 border-t border-slate-100 flex justify-between items-center">
+              {!isPublic ? (
+                <button
+                  onClick={() => handleDeleteEvent(selectedEvent)}
+                  className="px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg font-medium transition-colors flex items-center gap-2"
+                  title="Supprimer l'événement"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Supprimer</span>
+                </button>
+              ) : (
+                <div />
+              )}
               <button
                 onClick={() => setSelectedEvent(null)}
                 className="px-5 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition-colors"
