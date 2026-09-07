@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Convocation, Session, Student } from '../types';
 import { 
@@ -7,7 +7,7 @@ import {
   startOfWeek, endOfWeek, isSameMonth, isSameDay, eachDayOfInterval 
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, X, Printer, Users, FileText, Calendar as CalendarIcon, PlusCircle, Loader2, Share2, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Printer, Users, FileText, Calendar as CalendarIcon, PlusCircle, Loader2, Share2, Trash2, Edit3 } from 'lucide-react';
 
 interface Props {
   students: Student[];
@@ -31,6 +31,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
   
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [clickedDate, setClickedDate] = useState<Date | null>(null);
   
   const [newEventName, setNewEventName] = useState('');
@@ -41,6 +42,22 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
   const [newEventDescription, setNewEventDescription] = useState('');
   const [newEventRequireLicense, setNewEventRequireLicense] = useState(true);
   const [isSavingEvent, setIsSavingEvent] = useState(false);
+
+  const openEditModal = (event: CalendarEvent) => {
+    if (event.type !== 'session') return;
+    const session = event.raw as Session;
+    setNewEventName(session.name || '');
+    setNewEventTime(session.time || '');
+    setNewEventEndTime(session.endTime || '');
+    setNewEventLocation(session.location || '');
+    setNewEventNeedSnack(session.needSnack || false);
+    setNewEventDescription(session.description || '');
+    setNewEventRequireLicense(session.requireLicense ?? true);
+    setClickedDate(new Date(session.date));
+    setEditingEventId(event.id);
+    setIsCreatingEvent(true);
+    setSelectedEvent(null);
+  };
 
   useEffect(() => {
     let convosLoaded = false;
@@ -119,6 +136,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     setNewEventNeedSnack(false);
     setNewEventDescription('');
     setNewEventRequireLicense(true);
+    setEditingEventId(null);
     setIsCreatingEvent(true);
   };
 
@@ -128,24 +146,39 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     
     setIsSavingEvent(true);
     try {
-      const sessionData: Partial<Session> = {
-        name: newEventName || 'Séance',
-        date: format(clickedDate, 'yyyy-MM-dd'),
-        time: newEventTime,
-        endTime: newEventEndTime,
-        location: newEventLocation,
-        needSnack: newEventNeedSnack,
-        description: newEventDescription,
-        requireLicense: newEventRequireLicense,
-        enrolledStudentIds: [],
-        presentStudentIds: [],
-        schoolYear: activeYear
-      };
-      await addDoc(collection(db, 'sessions'), sessionData);
+      if (editingEventId) {
+        const updateData = {
+          name: newEventName || 'Séance',
+          date: format(clickedDate, 'yyyy-MM-dd'),
+          time: newEventTime,
+          endTime: newEventEndTime,
+          location: newEventLocation,
+          needSnack: newEventNeedSnack,
+          description: newEventDescription,
+          requireLicense: newEventRequireLicense
+        };
+        await updateDoc(doc(db, 'sessions', editingEventId), updateData);
+      } else {
+        const sessionData: Partial<Session> = {
+          name: newEventName || 'Séance',
+          date: format(clickedDate, 'yyyy-MM-dd'),
+          time: newEventTime,
+          endTime: newEventEndTime,
+          location: newEventLocation,
+          needSnack: newEventNeedSnack,
+          description: newEventDescription,
+          requireLicense: newEventRequireLicense,
+          enrolledStudentIds: [],
+          presentStudentIds: [],
+          schoolYear: activeYear
+        };
+        await addDoc(collection(db, 'sessions'), sessionData);
+      }
       setIsCreatingEvent(false);
+      setEditingEventId(null);
     } catch (err) {
       console.error(err);
-      alert('Erreur lors de la création de la séance.');
+      alert('Erreur lors de l\'enregistrement de la séance.');
     } finally {
       setIsSavingEvent(false);
     }
@@ -545,14 +578,26 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
             
             <div className="p-4 border-t border-slate-100 flex justify-between items-center">
               {!isPublic ? (
-                <button
-                  onClick={() => handleDeleteEvent(selectedEvent)}
-                  className="px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg font-medium transition-colors flex items-center gap-2"
-                  title="Supprimer l'événement"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Supprimer</span>
-                </button>
+                <div className="flex gap-2">
+                  {selectedEvent.type === 'session' && (
+                    <button
+                      onClick={() => openEditModal(selectedEvent)}
+                      className="px-4 py-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg font-medium transition-colors flex items-center gap-2"
+                      title="Modifier l'événement"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      <span>Modifier</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleDeleteEvent(selectedEvent)}
+                    className="px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg font-medium transition-colors flex items-center gap-2"
+                    title="Supprimer l'événement"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Supprimer</span>
+                  </button>
+                </div>
               ) : (
                 <div />
               )}
@@ -573,7 +618,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 animate-in fade-in zoom-in-95 duration-200">
             <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
               <PlusCircle className="w-5 h-5 text-indigo-600" />
-              Créer une Séance
+              {editingEventId ? 'Modifier la Séance' : 'Créer une Séance'}
             </h2>
             
             <form onSubmit={handleCreateEvent} className="space-y-4">
@@ -682,7 +727,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                   className="flex items-center gap-2 px-5 py-2 text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg font-medium transition-colors shadow-sm disabled:opacity-50"
                 >
                   {isSavingEvent && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Créer la séance
+                  {editingEventId ? 'Enregistrer les modifications' : 'Créer la séance'}
                 </button>
               </div>
             </form>
