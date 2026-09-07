@@ -3,6 +3,7 @@ import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where
 import { db } from '../lib/firebase';
 import { Student, Session } from '../types';
 import { PlusCircle, Calendar, Trash2, CheckCircle2, Circle, Users, Save, Link2 } from 'lucide-react';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface SessionManagerProps {
   students: Student[];
@@ -13,6 +14,8 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
+
   
   const [isCreating, setIsCreating] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
@@ -72,15 +75,15 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Voulez-vous vraiment supprimer cette séance ?")) {
-      try {
-        await deleteDoc(doc(db, 'sessions', id));
-        if (activeSessionId === id) setActiveSessionId(null);
-      } catch (err) {
-        console.error(err);
-      }
+  const confirmDelete = async () => {
+    if (!sessionToDelete) return;
+    try {
+      await deleteDoc(doc(db, 'sessions', sessionToDelete));
+      if (activeSessionId === sessionToDelete) setActiveSessionId(null);
+    } catch (err) {
+      console.error(err);
     }
+    setSessionToDelete(null);
   };
 
   const toggleEnrollment = async (studentId: string) => {
@@ -307,7 +310,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                 </button>
               </div>
               <button 
-                onClick={() => handleDelete(activeSession.id)}
+                onClick={() => setSessionToDelete(activeSession.id)}
                 className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                 title="Supprimer la séance"
               >
@@ -405,6 +408,14 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
           </div>
         )}
       </div>
+
+      <ConfirmDialog 
+        isOpen={!!sessionToDelete}
+        title="Supprimer la séance"
+        message="Êtes-vous sûr de vouloir supprimer cette séance ? Cette action est irréversible et supprimera également les données de pointage associées."
+        onConfirm={confirmDelete}
+        onCancel={() => setSessionToDelete(null)}
+      />
     </div>
   );
 }

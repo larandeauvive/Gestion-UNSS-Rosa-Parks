@@ -14,6 +14,7 @@ import { SessionManager } from './components/SessionManager';
 import { PublicEnrollment } from './components/PublicEnrollment';
 import { LoginScreen } from './components/LoginScreen';
 import { Dashboard } from './components/Dashboard';
+import { CalendarView } from './components/CalendarView';
 import { importFromCSV } from './lib/importCsv';
 import { deleteMultipleStudents, updateMultipleStudents, addStudent } from './lib/db';
 
@@ -58,7 +59,7 @@ export default function App() {
   
   // View State
   const [activeYear, setActiveYear] = useState<string>('2025-2026');
-  const [currentTab, setCurrentTab] = useState<'eleves'|'convocations'|'dashboard'|'seances'>('dashboard');
+  const [currentTab, setCurrentTab] = useState<'eleves'|'convocations'|'dashboard'|'seances'|'calendrier'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [autoCreateConvocation, setAutoCreateConvocation] = useState(false);
@@ -362,6 +363,12 @@ export default function App() {
           >
             Créneaux Hebdomadaires
           </button>
+          <button 
+            onClick={() => setCurrentTab('calendrier')}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'calendrier' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+          >
+            Calendrier
+          </button>
         </div>
       </header>
 
@@ -507,6 +514,13 @@ export default function App() {
 
         {currentTab === 'seances' && (
           <SessionManager 
+            students={students.filter(s => s.schoolYear === activeYear)}
+            activeYear={activeYear}
+          />
+        )}
+
+        {currentTab === 'calendrier' && (
+          <CalendarView 
             students={students.filter(s => s.schoolYear === activeYear)}
             activeYear={activeYear}
           />

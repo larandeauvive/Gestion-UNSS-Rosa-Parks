@@ -3,6 +3,7 @@ import { collection, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, doc
 import { db } from '../lib/firebase';
 import { Convocation, Student } from '../types';
 import { PlusCircle, Trash2, Printer, Search, X, Save, Edit3, ChevronRight } from 'lucide-react';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface Props {
   students: Student[];
@@ -14,6 +15,7 @@ interface Props {
 export const ConvocationManager: React.FC<Props> = ({ students, activeYear, autoCreateNew, onAutoCreateConsumed }) => {
   const [convocations, setConvocations] = useState<Convocation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [convToDel, setConvToDel] = useState<string | null>(null);
 
   const [activeConvocation, setActiveConvocation] = useState<Convocation | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -71,15 +73,18 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
     setIsEditing(false);
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm("Supprimer cette convocation ?")) {
-      await deleteDoc(doc(db, 'convocations', id));
-      if (activeConvocation?.id === id) {
+  const confirmDelete = async () => {
+    if (!convToDel) return;
+    try {
+      await deleteDoc(doc(db, 'convocations', convToDel));
+      if (activeConvocation?.id === convToDel) {
         setActiveConvocation(null);
         setIsEditing(false);
       }
+    } catch (err) {
+      console.error(err);
     }
+    setConvToDel(null);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -372,7 +377,7 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
                     <button onClick={(e) => { e.stopPropagation(); handleEdit(conv); }} className="text-slate-400 hover:text-slate-900 transition-colors" title="Modifier">
                       <Edit3 className="w-4 h-4" />
                     </button>
-                    <button onClick={(e) => handleDelete(conv.id, e)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Supprimer">
+                    <button onClick={(e) => { e.stopPropagation(); setConvToDel(conv.id); }} className="text-slate-400 hover:text-rose-600 transition-colors" title="Supprimer">
                       <Trash2 className="w-4 h-4" />
                     </button>
                  </div>
@@ -629,6 +634,14 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
            </form>
          )}
       </div>
+
+      <ConfirmDialog 
+        isOpen={!!convToDel}
+        title="Supprimer la convocation"
+        message="Êtes-vous sûr de vouloir supprimer cette convocation ? Cette action est irréversible."
+        onConfirm={confirmDelete}
+        onCancel={() => setConvToDel(null)}
+      />
     </div>
   );
 };

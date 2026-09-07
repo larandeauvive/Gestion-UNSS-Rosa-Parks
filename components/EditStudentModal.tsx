@@ -3,6 +3,7 @@ import { Student } from '../types';
 import { X, Save, FileEdit, Trash2 } from 'lucide-react';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface EditStudentModalProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
 }) => {
   const [formData, setFormData] = useState<Partial<Student>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [showConfirmDel, setShowConfirmDel] = useState(false);
 
   useEffect(() => {
     if (student) {
@@ -55,7 +57,12 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
   };
 
   const handleDelete = async () => {
-    if (!student || !window.confirm("Êtes-vous sûr de vouloir supprimer cet élève ? Cette action est irréversible.")) return;
+    if (!student) return;
+    setShowConfirmDel(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!student) return;
     setIsSaving(true);
     try {
       const docRef = doc(db, 'students', student.id);
@@ -67,6 +74,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
       alert('Erreur lors de la suppression.');
     }
     setIsSaving(false);
+    setShowConfirmDel(false);
   };
 
   return (
@@ -271,6 +279,14 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
            </div>
         </form>
       </div>
+
+      <ConfirmDialog 
+        isOpen={showConfirmDel}
+        title="Supprimer l'élève"
+        message="Êtes-vous sûr de vouloir supprimer cet élève ? Cette action est irréversible."
+        onConfirm={confirmDelete}
+        onCancel={() => setShowConfirmDel(false)}
+      />
     </div>
   );
 };
