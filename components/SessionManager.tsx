@@ -188,8 +188,17 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                       {new Date(s.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} • {s.time}{s.endTime ? ` - ${s.endTime}` : ''}
                     </div>
                   </div>
-                  <div className="text-xs font-medium bg-white px-2 py-1 rounded-md border border-slate-200 text-slate-600">
-                    {(s.presentStudentIds || []).length} / {(s.enrolledStudentIds || []).length}
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs font-medium bg-white px-2 py-1 rounded-md border border-slate-200 text-slate-600">
+                      {(s.presentStudentIds || []).length} / {(s.enrolledStudentIds || []).length}
+                    </div>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setSessionToDelete(s.id); }} 
+                      className="text-slate-400 hover:text-red-600 transition-colors" 
+                      title="Supprimer la séance"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </div>

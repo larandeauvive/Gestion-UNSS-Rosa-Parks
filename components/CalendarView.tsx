@@ -528,7 +528,17 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                 <div className="text-center py-10">
                   <CalendarIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                   <p className="text-slate-600 font-medium text-lg">Événement planifié</p>
-                  <p className="text-slate-500 text-sm">Plus d'informations auprès de l'équipe encadrante.</p>
+                  <p className="text-slate-500 text-sm mb-6">Plus d'informations auprès de l'équipe encadrante.</p>
+                  
+                  {selectedEvent.type === 'session' && (
+                    <button 
+                      onClick={() => window.location.href = `?enroll=${selectedEvent.id}`}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-colors shadow-sm"
+                    >
+                      <Users className="w-5 h-5" />
+                      Je m'inscris à cette séance
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -541,7 +551,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                   title="Supprimer l'événement"
                 >
                   <Trash2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Supprimer</span>
+                  <span>Supprimer</span>
                 </button>
               ) : (
                 <div />
