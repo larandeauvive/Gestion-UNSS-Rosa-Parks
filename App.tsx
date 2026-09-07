@@ -43,6 +43,7 @@ export default function App() {
   
   // Public Route state
   const [enrollSessionId, setEnrollSessionId] = useState<string | null>(null);
+  const [isPublicCalendar, setIsPublicCalendar] = useState(false);
 
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -54,6 +55,9 @@ export default function App() {
     const session = params.get('enroll');
     if (session) {
       setEnrollSessionId(session);
+    }
+    if (params.get('public') === 'calendar') {
+      setIsPublicCalendar(true);
     }
   }, []);
   
@@ -168,6 +172,20 @@ export default function App() {
 
   if (enrollSessionId) {
     return <PublicEnrollment sessionId={enrollSessionId} />;
+  }
+  
+  if (isPublicCalendar) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          <CalendarView 
+            students={students.filter(s => s.schoolYear === activeYear)}
+            activeYear={activeYear}
+            isPublic={true}
+          />
+        </div>
+      </div>
+    );
   }
 
   if (!isAuthenticated) {

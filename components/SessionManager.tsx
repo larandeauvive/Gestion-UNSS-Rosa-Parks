@@ -36,7 +36,11 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
       snapshot.forEach(doc => {
         data.push({ id: doc.id, ...doc.data() } as Session);
       });
-      data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      data.sort((a, b) => {
+        const dateA = new Date(a.date + 'T' + (a.time || '00:00')).getTime();
+        const dateB = new Date(b.date + 'T' + (b.time || '00:00')).getTime();
+        return dateB - dateA;
+      });
       setSessions(data);
       if (!activeSessionId && data.length > 0) {
         setActiveSessionId(data[0].id);
@@ -181,7 +185,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                       {s.name}
                     </div>
                     <div className="text-xs text-slate-500 mt-1">
-                      {new Date(s.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} • {s.time}
+                      {new Date(s.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} • {s.time}{s.endTime ? ` - ${s.endTime}` : ''}
                     </div>
                   </div>
                   <div className="text-xs font-medium bg-white px-2 py-1 rounded-md border border-slate-200 text-slate-600">
@@ -214,7 +218,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                   placeholder="Ex: Entraînement Futsal"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1">Date</label>
                   <input 
@@ -226,7 +230,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Horaire</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Début</label>
                   <input 
                     type="time" 
                     required
@@ -235,9 +239,41 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                     onChange={e => setFormData({...formData, time: e.target.value})}
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Fin</label>
+                  <input 
+                    type="time" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={formData.endTime || ''}
+                    onChange={e => setFormData({...formData, endTime: e.target.value})}
+                  />
+                </div>
               </div>
+              
               <div>
-                <label className="flex items-center gap-2 cursor-pointer mt-2 p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Lieu</label>
+                <input 
+                  type="text" 
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={formData.location || ''}
+                  onChange={e => setFormData({...formData, location: e.target.value})}
+                  placeholder="Ex: Gymnase"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Informations supplémentaires</label>
+                <textarea 
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={formData.description || ''}
+                  onChange={e => setFormData({...formData, description: e.target.value})}
+                  placeholder="Ex: N'oubliez pas les gourdes..."
+                  rows={2}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-50 border border-slate-200 rounded-lg">
                   <input 
                     type="checkbox" 
                     className="rounded text-indigo-600 focus:ring-indigo-500 w-5 h-5"
@@ -245,6 +281,15 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                     onChange={e => setFormData({...formData, requireLicense: e.target.checked})}
                   />
                   <span className="text-sm font-semibold text-slate-700">Obligation d'être à jour de sa licence</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                  <input 
+                    type="checkbox" 
+                    className="rounded text-amber-600 focus:ring-amber-500 w-5 h-5"
+                    checked={formData.needSnack || false}
+                    onChange={e => setFormData({...formData, needSnack: e.target.checked})}
+                  />
+                  <span className="text-sm font-semibold text-amber-800">Prévoir un goûter</span>
                 </label>
               </div>
 
@@ -292,12 +337,26 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                 <div className="flex items-center gap-3 mb-1">
                   <h2 className="text-2xl font-bold text-slate-900">{activeSession.name}</h2>
                   {activeSession.requireLicense && (
-                    <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-1 rounded-full border border-amber-200">Licence Obligatoire</span>
+                    <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full border border-red-200">Licence Obligatoire</span>
+                  )}
+                  {activeSession.needSnack && (
+                    <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-1 rounded-full border border-amber-200">Goûter à prévoir</span>
                   )}
                 </div>
-                <p className="text-slate-500 font-medium mt-1">
-                  {new Date(activeSession.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} • {activeSession.time}
-                </p>
+                <div className="flex flex-col gap-1 mt-2">
+                  <p className="text-slate-600 font-medium text-sm">
+                    📅 {new Date(activeSession.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} • 
+                    🕒 {activeSession.time} {activeSession.endTime ? `- ${activeSession.endTime}` : ''}
+                  </p>
+                  {activeSession.location && (
+                    <p className="text-slate-600 font-medium text-sm">📍 {activeSession.location}</p>
+                  )}
+                  {activeSession.description && (
+                    <p className="text-slate-500 text-sm mt-1 bg-white p-2 rounded border border-slate-200 inline-block">
+                      {activeSession.description}
+                    </p>
+                  )}
+                </div>
                 <button 
                   onClick={() => {
                     const url = `${window.location.origin}?enroll=${activeSession.id}`;

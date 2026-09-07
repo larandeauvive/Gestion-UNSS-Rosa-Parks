@@ -50,7 +50,11 @@ export interface Convocation {
 export interface Session {
   id: string;
   date: string; // ISO date string
-  time: string; // Horaire (ex: "13:30")
+  time: string; // Horaire de début (ex: "13:30")
+  endTime?: string; // Horaire de fin (ex: "15:30")
+  location?: string; // Lieu de la séance
+  needSnack?: boolean; // Besoin d'un goûter (true/false)
+  description?: string; // Informations supplémentaires
   requireLicense: boolean; // Obligation d'être à jour de sa licence
   name: string; // Nom de la séance (ex: "Entraînement Mercredi")
   schoolYear: string;
