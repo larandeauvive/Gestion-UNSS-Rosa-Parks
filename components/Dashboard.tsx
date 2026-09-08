@@ -65,10 +65,12 @@ export const Dashboard: React.FC<Props> = ({ students, activeYear, onNewConvocat
 
   // Base Data
   const studentsThisYear = students.filter(s => s.schoolYear === activeYear);
-  const totalLicencies = studentsThisYear.length;
   
-  const fillesLicenciees = studentsThisYear.filter(s => s.gender === 'F').length;
-  const garconsLicencies = studentsThisYear.filter(s => s.gender === 'G').length;
+  const licensedStudents = studentsThisYear.filter(s => !!s.licenseNumber && s.licenseNumber.trim() !== '');
+  const totalLicencies = licensedStudents.length;
+  
+  const fillesLicenciees = licensedStudents.filter(s => s.gender === 'F').length;
+  const garconsLicencies = licensedStudents.filter(s => s.gender === 'G').length;
 
   const tauxLicencies = schoolTotal > 0 ? ((totalLicencies / schoolTotal) * 100).toFixed(1) : '0';
 

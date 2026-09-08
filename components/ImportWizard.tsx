@@ -40,8 +40,9 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
   const [fileHeaders, setFileHeaders] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
   const [isProcessing, setIsProcessing] = useState(false);
-  const [importRecords, setImportRecords] = useState<{ student: Omit<Student, 'id'>, isDuplicate: boolean, selected: boolean }[]>([]);
+  const [importRecords, setImportRecords] = useState<{ student: Partial<Student> & Omit<Student, 'id'>, isDuplicate: boolean, selected: boolean }[]>([]);
   const [previewUpdateData, setPreviewUpdateData] = useState<{ id: string, licenseNumber: string, originalStudent: Student }[]>([]);
+  const [missingStudents, setMissingStudents] = useState<{ student: Student, selected: boolean }[]>([]);
   const [targetClass, setTargetClass] = useState('');
 
   if (!isOpen) return null;
@@ -136,7 +137,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
       }
 
       const extractedClass = classGroup ? (row[classGroup] || '').toUpperCase() : '';
-      const isDuplicate = students.some(s => 
+      const existingStudent = students.find(s => 
         s.schoolYear === activeYear && 
         normalizeStr(s.lastName) === normalizeStr(lName) && 
         normalizeStr(s.firstName) === normalizeStr(fName)
@@ -144,27 +145,35 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
 
       return {
         student: {
+          ...(existingStudent ? { id: existingStudent.id } : {}),
           lastName: lName,
           firstName: fName,
-          birthDate: birthDate ? (row[birthDate] || '') : '',
-          classGroup: targetClass || extractedClass,
+          birthDate: birthDate ? (row[birthDate] || '') : (existingStudent?.birthDate || ''),
+          classGroup: targetClass || extractedClass || (existingStudent?.classGroup || ''),
           schoolYear: activeYear,
-          licenseNumber: '',
-          paid: 'NON',
-          amount: '',
-          paymentMethod: '',
-          parentalAuth: '',
-          imageRights: '',
-          tshirt: '',
-          size: '',
-          gender: gender ? (row[gender] || '') : '',
-          swimmingCertificate: 'NON'
+          licenseNumber: existingStudent?.licenseNumber || '',
+          paid: existingStudent?.paid || 'NON',
+          amount: existingStudent?.amount || '',
+          paymentMethod: existingStudent?.paymentMethod || '',
+          parentalAuth: existingStudent?.parentalAuth || '',
+          imageRights: existingStudent?.imageRights || '',
+          tshirt: existingStudent?.tshirt || '',
+          size: existingStudent?.size || '',
+          gender: gender ? (row[gender] || '') : (existingStudent?.gender || ''),
+          swimmingCertificate: existingStudent?.swimmingCertificate || 'NON'
         },
-        isDuplicate,
-        selected: !isDuplicate
+        isDuplicate: !!existingStudent,
+        selected: !existingStudent
       };
     }).filter(s => s.student.lastName);
 
+    // Identify missing students (in DB for this year, but not in imported list)
+    const importedNames = new Set(parsedStudents.map(s => `${normalizeStr(s.student.lastName)}_${normalizeStr(s.student.firstName)}`));
+    const missing = students
+      .filter(s => s.schoolYear === activeYear && !importedNames.has(`${normalizeStr(s.lastName)}_${normalizeStr(s.firstName)}`))
+      .map(s => ({ student: s, selected: true }));
+
+    setMissingStudents(missing);
     setImportRecords(parsedStudents);
     setStep(3);
     setIsProcessing(false);
@@ -230,10 +239,34 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
       let count = 0;
       
       const recordsToImport = importRecords.filter(r => r.selected).map(r => r.student);
+      const recordsToDelete = missingStudents.filter(r => r.selected).map(r => r.student);
 
       for (const student of recordsToImport) {
-        const docRef = doc(collection(db, "students"));
-        batch.set(docRef, student);
+        let docRef;
+        const dataToSave = { ...student };
+        
+        if (dataToSave.id) {
+          const id = dataToSave.id;
+          delete (dataToSave as any).id;
+          docRef = doc(db, "students", id);
+          batch.update(docRef, dataToSave as any);
+        } else {
+          docRef = doc(collection(db, "students"));
+          batch.set(docRef, dataToSave);
+        }
+        
+        count++;
+        
+        if (count % 499 === 0) {
+          await batch.commit();
+          batch = writeBatch(db);
+        }
+      }
+
+      for (const student of recordsToDelete) {
+        if (!student.id) continue;
+        const docRef = doc(db, "students", student.id);
+        batch.delete(docRef);
         count++;
         
         if (count % 499 === 0) {
@@ -242,7 +275,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
         }
       }
       
-      if (count % 499 !== 0) {
+      if (count > 0 && count % 499 !== 0) {
         await batch.commit();
       }
       
@@ -477,17 +510,77 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                   </table>
                 </div>
 
-                <div className="flex justify-between pt-4 border-t border-slate-100">
+                {missingStudents.length > 0 && (
+                  <>
+                    <div className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-lg flex items-center justify-between mt-6">
+                      <div className="flex items-center gap-2">
+                        <X className="w-5 h-5" />
+                        <span className="font-medium">
+                          {missingStudents.length} élèves actuels non trouvés dans le fichier (proposition de suppression).
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[300px] overflow-y-auto bg-white shadow-sm">
+                      <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-semibold sticky top-0 border-b border-slate-200">
+                          <tr>
+                            <th className="px-4 py-3">
+                              <input 
+                                type="checkbox" 
+                                className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                                checked={missingStudents.length > 0 && missingStudents.every(r => r.selected)}
+                                onChange={e => { 
+                                   const checked = e.target.checked;
+                                   setMissingStudents(records => records.map(r => ({...r, selected: checked})));
+                                }}
+                              />
+                            </th>
+                            <th className="px-4 py-3">Nom</th>
+                            <th className="px-4 py-3">Prénom</th>
+                            <th className="px-4 py-3">Classe</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {missingStudents.map((r, i) => (
+                            <tr key={i} className={`hover:bg-slate-50 ${!r.selected ? 'opacity-50' : ''}`}>
+                              <td className="px-4 py-2">
+                                 <input 
+                                   type="checkbox" 
+                                   checked={r.selected}
+                                   onChange={e => {
+                                      const checked = e.target.checked;
+                                      setMissingStudents(records => {
+                                          const newRecords = [...records];
+                                          newRecords[i] = {...newRecords[i], selected: checked};
+                                          return newRecords;
+                                      });
+                                   }}
+                                   className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                                 />
+                              </td>
+                              <td className="px-4 py-2 font-medium text-slate-900">{r.student.lastName}</td>
+                              <td className="px-4 py-2">{r.student.firstName}</td>
+                              <td className="px-4 py-2 font-medium">{r.student.classGroup}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex justify-between pt-4 border-t border-slate-100 mt-4">
                   <button onClick={() => setStep(2)} className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">
                     Retour au mapping
                   </button>
                   <button 
                     onClick={handleSaveAdd} 
-                    disabled={isProcessing || importRecords.filter(r => r.selected).length === 0}
+                    disabled={isProcessing || (importRecords.filter(r => r.selected).length === 0 && missingStudents.filter(r => r.selected).length === 0)}
                     className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white font-medium hover:bg-slate-800 rounded-xl transition-all disabled:opacity-50"
                   >
                     {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-                    Ajouter à la base
+                    Mettre à jour la base
                   </button>
                 </div>
              </div>
