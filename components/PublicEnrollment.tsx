@@ -67,13 +67,20 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
       const currentEnrolled = new Set(session.enrolledStudentIds || []);
       currentEnrolled.add(student.id);
       
+      const newEnrolledIds = Array.from(currentEnrolled);
       await updateDoc(doc(db, 'sessions', session.id), {
-        enrolledStudentIds: Array.from(currentEnrolled)
+        enrolledStudentIds: newEnrolledIds
       });
+      
+      if (session.convocationId) {
+        await updateDoc(doc(db, 'convocations', session.convocationId), {
+          studentIds: newEnrolledIds
+        });
+      }
       
       setSession({
         ...session,
-        enrolledStudentIds: Array.from(currentEnrolled)
+        enrolledStudentIds: newEnrolledIds
       });
       
     } catch (err) {

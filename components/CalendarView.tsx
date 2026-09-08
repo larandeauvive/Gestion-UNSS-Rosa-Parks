@@ -43,6 +43,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
   const [newEventRequireLicense, setNewEventRequireLicense] = useState(true);
   const [isSavingEvent, setIsSavingEvent] = useState(false);
 
+  const [newEventGenerateConvocation, setNewEventGenerateConvocation] = useState(false);
+
   const openEditModal = (event: CalendarEvent) => {
     if (event.type !== 'session') return;
     const session = event.raw as Session;
@@ -53,6 +55,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     setNewEventNeedSnack(session.needSnack || false);
     setNewEventDescription(session.description || '');
     setNewEventRequireLicense(session.requireLicense ?? true);
+    setNewEventGenerateConvocation(!!session.convocationId);
     setClickedDate(new Date(session.date));
     setEditingEventId(event.id);
     setIsCreatingEvent(true);
@@ -136,6 +139,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     setNewEventNeedSnack(false);
     setNewEventDescription('');
     setNewEventRequireLicense(true);
+    setNewEventGenerateConvocation(false);
     setEditingEventId(null);
     setIsCreatingEvent(true);
   };
@@ -158,6 +162,17 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           requireLicense: newEventRequireLicense
         };
         await updateDoc(doc(db, 'sessions', editingEventId), updateData);
+        
+        const sessionDoc = events.find(ev => ev.id === editingEventId)?.raw as Session;
+        if (sessionDoc?.convocationId) {
+          const convUpdateData = {
+            competitionName: newEventName || 'Séance',
+            departureDate: format(clickedDate, 'yyyy-MM-dd') + (newEventTime ? `T${newEventTime}` : 'T00:00'),
+            returnDate: format(clickedDate, 'yyyy-MM-dd') + (newEventEndTime ? `T${newEventEndTime}` : 'T23:59'),
+            needSnack: newEventNeedSnack ? 'OUI' : 'NON'
+          };
+          await updateDoc(doc(db, 'convocations', sessionDoc.convocationId), convUpdateData);
+        }
       } else {
         const sessionData: Partial<Session> = {
           name: newEventName || 'Séance',
@@ -172,7 +187,23 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           presentStudentIds: [],
           schoolYear: activeYear
         };
-        await addDoc(collection(db, 'sessions'), sessionData);
+        const sessionRef = await addDoc(collection(db, 'sessions'), sessionData);
+        
+        if (newEventGenerateConvocation) {
+           const convData: Partial<Convocation> = {
+              competitionName: newEventName || 'Séance',
+              departureDate: format(clickedDate, 'yyyy-MM-dd') + (newEventTime ? `T${newEventTime}` : 'T00:00'),
+              returnDate: format(clickedDate, 'yyyy-MM-dd') + (newEventEndTime ? `T${newEventEndTime}` : 'T23:59'),
+              guides: '',
+              needSnack: newEventNeedSnack ? 'OUI' : 'NON',
+              needPicnic: 'NON',
+              schoolYear: activeYear,
+              studentIds: [],
+              sessionId: sessionRef.id
+           };
+           const convRef = await addDoc(collection(db, 'convocations'), convData);
+           await updateDoc(doc(db, 'sessions', sessionRef.id), { convocationId: convRef.id });
+        }
       }
       setIsCreatingEvent(false);
       setEditingEventId(null);
@@ -189,6 +220,11 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
       try {
         const collectionName = event.type === 'session' ? 'sessions' : 'convocations';
         await deleteDoc(doc(db, collectionName, event.id));
+        
+        if (event.type === 'session' && (event.raw as Session).convocationId) {
+          await deleteDoc(doc(db, 'convocations', (event.raw as Session).convocationId!));
+        }
+        
         setSelectedEvent(null);
       } catch (err) {
         console.error(err);
@@ -711,6 +747,28 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                   Les élèves doivent être à jour de leur licence pour s'inscrire
                 </label>
               </div>
+              
+              {!editingEventId && (
+                <div className="flex items-center gap-2 bg-indigo-50 p-3 rounded-lg border border-indigo-200">
+                  <input 
+                    type="checkbox" 
+                    id="generateConvocation"
+                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                    checked={newEventGenerateConvocation}
+                    onChange={e => setNewEventGenerateConvocation(e.target.checked)}
+                  />
+                  <label htmlFor="generateConvocation" className="text-sm font-semibold text-indigo-900">
+                    Intégrer dans la gestion des convocations
+                  </label>
+                </div>
+              )}
+              {editingEventId && newEventGenerateConvocation && (
+                 <div className="flex items-center gap-2 bg-indigo-50 p-3 rounded-lg border border-indigo-200">
+                   <span className="text-sm font-semibold text-indigo-900">
+                     Cette séance est liée à une convocation.
+                   </span>
+                 </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-6 border-t border-slate-100 mt-6">
                 <button

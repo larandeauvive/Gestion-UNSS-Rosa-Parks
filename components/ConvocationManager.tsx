@@ -113,6 +113,11 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
 
       if (activeConvocation) {
         await updateDoc(doc(db, 'convocations', activeConvocation.id), dataToSave);
+        if (dataToSave.sessionId) {
+          await updateDoc(doc(db, 'sessions', dataToSave.sessionId), {
+            enrolledStudentIds: dataToSave.studentIds
+          });
+        }
       } else {
         await addDoc(collection(db, 'convocations'), dataToSave);
       }

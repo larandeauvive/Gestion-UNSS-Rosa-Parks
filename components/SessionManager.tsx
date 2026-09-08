@@ -106,10 +106,17 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
     }
 
     try {
+      const newEnrolledIds = Array.from(enrolled);
       await updateDoc(doc(db, 'sessions', activeSession.id), {
-        enrolledStudentIds: Array.from(enrolled),
+        enrolledStudentIds: newEnrolledIds,
         presentStudentIds: Array.from(present)
       });
+      
+      if (activeSession.convocationId) {
+         await updateDoc(doc(db, 'convocations', activeSession.convocationId), {
+           studentIds: newEnrolledIds
+         });
+      }
     } catch (err) {
       console.error(err);
     }

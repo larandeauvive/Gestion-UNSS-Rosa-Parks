@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { Upload, X, Check, FileSpreadsheet, Loader2, Play, Users, ArrowRight } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { collection, writeBatch, doc } from 'firebase/firestore';
@@ -35,12 +35,13 @@ function normalizeStr(str: string) {
 
 export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, activeYear, onSuccess, students }) => {
   const [mode, setMode] = useState<'pronote' | 'unss'>('pronote');
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [parsedData, setParsedData] = useState<any[]>([]);
+  const [fileHeaders, setFileHeaders] = useState<string[]>([]);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
   const [isProcessing, setIsProcessing] = useState(false);
   const [importRecords, setImportRecords] = useState<{ student: Omit<Student, 'id'>, isDuplicate: boolean, selected: boolean }[]>([]);
   const [previewUpdateData, setPreviewUpdateData] = useState<{ id: string, licenseNumber: string, originalStudent: Student }[]>([]);
-
   const [targetClass, setTargetClass] = useState('');
 
   if (!isOpen) return null;
@@ -48,53 +49,104 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        setParsedData(results.data);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const bstr = evt.target?.result;
+      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      const data = XLSX.utils.sheet_to_json(ws, { defval: "", raw: false });
+
+      if (data.length > 0) {
+        const headers = Object.keys(data[0]);
+        setFileHeaders(headers);
+        setParsedData(data);
+        
+        // Auto-detect columns
+        const newMapping: Record<string, string> = {};
+        const lowerHeaders = headers.map(h => h.toLowerCase());
+        
+        const findHeader = (keywords: string[]) => {
+            const index = lowerHeaders.findIndex(h => keywords.some(k => h.includes(k)));
+            return index >= 0 ? headers[index] : '';
+        };
+
+        if (mode === 'pronote') {
+            newMapping.lastName = findHeader(['nom']);
+            newMapping.firstName = findHeader(['prénom', 'prenom']);
+            newMapping.classGroup = findHeader(['classe', 'rattachement']);
+            newMapping.birthDate = findHeader(['né(e)', 'naissance', 'date']);
+            newMapping.gender = findHeader(['sexe', 'genre']);
+        } else {
+            newMapping.lastName = findHeader(['nom']);
+            newMapping.firstName = findHeader(['prénom', 'prenom']);
+            newMapping.birthDate = findHeader(['né(e)', 'naissance', 'date']);
+            newMapping.licenseNumber = findHeader(['licence', 'numéro']);
+        }
+        setColumnMapping(newMapping);
+        setStep(2);
+      } else {
+        alert("Le fichier est vide.");
       }
-    });
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const processMapping = () => {
+    if (mode === 'pronote') {
+        processPronote();
+    } else {
+        processUnss();
+    }
   };
 
   const processPronote = () => {
     setIsProcessing(true);
-    
-    const parsedStudents: { student: Omit<Student, 'id'>, isDuplicate: boolean, selected: boolean }[] = parsedData.map(row => {
-      const el = row['Élèves'] || row['Eleves'] || row['Nom Prénom'] || '';
-      
-      const parts = el.trim().split(/\s+/);
-      const lastNameParts = [];
-      const firstNameParts = [];
-      
-      for (const part of parts) {
-        if (part === part.toUpperCase() && /[A-ZÀ-ÖØ-Þ]/.test(part)) {
-          lastNameParts.push(part);
-        } else {
-          firstNameParts.push(part);
-        }
-      }
-      if (lastNameParts.length === 0) {
-        lastNameParts.push(parts[0] || '');
-        firstNameParts.push(...parts.slice(1));
+    const { lastName, firstName, classGroup, birthDate, gender } = columnMapping;
+
+    if (!lastName || !firstName) {
+        alert("Veuillez mapper au moins le Nom et le Prénom.");
+        setIsProcessing(false);
+        return;
+    }
+
+    const parsedStudents = parsedData.map(row => {
+      let lName = (row[lastName] || '').trim().toUpperCase();
+      let fName = (row[firstName] || '').trim();
+
+      // Fallback if they are in the same column (e.g. Nom Prénom)
+      if (lastName === firstName && lName) {
+          const parts = lName.split(/\s+/);
+          const lParts = [];
+          const fParts = [];
+          for (const part of parts) {
+            if (part === part.toUpperCase() && /[A-ZÀ-ÖØ-Þ]/.test(part)) {
+                lParts.push(part);
+            } else {
+                fParts.push(part);
+            }
+          }
+          if (lParts.length === 0) {
+              lParts.push(parts[0] || '');
+              fParts.push(...parts.slice(1));
+          }
+          lName = lParts.join(' ').toUpperCase();
+          fName = fParts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
       }
 
-      const extractedClass = (row['Classe de rattachement'] || row['Classe'] || '').toUpperCase();
-      const lastName = lastNameParts.join(' ').toUpperCase();
-      const firstName = firstNameParts.join(' ');
-
+      const extractedClass = classGroup ? (row[classGroup] || '').toUpperCase() : '';
       const isDuplicate = students.some(s => 
         s.schoolYear === activeYear && 
-        normalizeStr(s.lastName) === normalizeStr(lastName) && 
-        normalizeStr(s.firstName) === normalizeStr(firstName)
+        normalizeStr(s.lastName) === normalizeStr(lName) && 
+        normalizeStr(s.firstName) === normalizeStr(fName)
       );
 
       return {
         student: {
-          lastName,
-          firstName,
-          birthDate: row['Né(e) le'] || row['Date de naissance'] || '',
+          lastName: lName,
+          firstName: fName,
+          birthDate: birthDate ? (row[birthDate] || '') : '',
           classGroup: targetClass || extractedClass,
           schoolYear: activeYear,
           licenseNumber: '',
@@ -105,31 +157,38 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
           imageRights: '',
           tshirt: '',
           size: '',
-          gender: row['Sexe'] || row['Genre'] || '',
+          gender: gender ? (row[gender] || '') : '',
           swimmingCertificate: 'NON'
         },
         isDuplicate,
-        selected: !isDuplicate // Do not select duplicates by default
+        selected: !isDuplicate
       };
     }).filter(s => s.student.lastName);
 
     setImportRecords(parsedStudents);
-    setStep(2);
+    setStep(3);
     setIsProcessing(false);
   };
 
   const processUnss = () => {
     setIsProcessing(true);
+    const { lastName, firstName, birthDate, licenseNumber } = columnMapping;
+
+    if (!lastName || !firstName || !birthDate || !licenseNumber) {
+        alert("Veuillez mapper tous les champs requis.");
+        setIsProcessing(false);
+        return;
+    }
 
     const updates: { id: string, licenseNumber: string, originalStudent: Student }[] = [];
 
     parsedData.forEach(row => {
-      const license = row['Numéro de licence'];
-      const origLastName = row['Nom'] || '';
-      const origFirstName = row['Prénom'] || '';
-      const dob = row['Date de naissance'] || row['Né(e) le'] || '';
+      const license = (row[licenseNumber] || '').trim();
+      const origLastName = (row[lastName] || '').trim();
+      const origFirstName = (row[firstName] || '').trim();
+      const dob = (row[birthDate] || '').trim();
 
-      if (!license || !dob) return;
+      if (!license || !dob || (!origLastName && !origFirstName)) return;
 
       const potentialMatches = students.filter(s => s.schoolYear === activeYear && s.birthDate === dob);
 
@@ -138,8 +197,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
         let bestScore = Infinity;
 
         const uFirstName = normalizeStr(origFirstName);
-        const uLastName = normalizeStr(origLastName);
-
+        
         for (const student of potentialMatches) {
           const sFirstName = normalizeStr(student.firstName);
           const score = levenshtein(sFirstName, uFirstName);
@@ -161,7 +219,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
     });
 
     setPreviewUpdateData(updates);
-    setStep(2);
+    setStep(3);
     setIsProcessing(false);
   };
 
@@ -227,6 +285,9 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
     setIsProcessing(false);
   };
 
+  const requiredPronote = ['lastName', 'firstName'];
+  const requiredUnss = ['lastName', 'firstName', 'birthDate', 'licenseNumber'];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl flex flex-col my-auto max-h-[90vh]">
@@ -246,7 +307,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
               className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${mode === 'pronote' ? 'border-slate-900 text-slate-900 bg-slate-50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
               onClick={() => { setMode('pronote'); setParsedData([]); }}
             >
-              1. Ajouter des élèves (Pronote)
+              1. Ajouter des élèves
             </button>
             <button 
               className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${mode === 'unss' ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
@@ -258,80 +319,98 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
         )}
 
         <div className="flex-1 overflow-y-auto p-6">
-          {step === 1 && mode === 'pronote' && (
+          {step === 1 && (
             <div className="space-y-6 animate-in fade-in">
-              <div className={`p-8 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center transition-colors ${parsedData.length > 0 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'}`}>
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${parsedData.length > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-white text-slate-400 shadow-sm'}`}>
-                  {parsedData.length > 0 ? <Check className="w-6 h-6" /> : <Users className="w-6 h-6" />}
+              <div className="p-8 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center transition-colors border-slate-300 hover:border-slate-400 bg-slate-50">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-white text-slate-400 shadow-sm">
+                  <FileSpreadsheet className="w-6 h-6" />
                 </div>
-                <h3 className="font-bold text-slate-900 mb-1">Fichier Élèves (Pronote)</h3>
-                <p className="text-sm text-slate-500 mb-6 max-w-sm">Importez un fichier CSV pour ajouter de nouveaux élèves à la base de données de l'année <b>{activeYear}</b>.</p>
+                <h3 className="font-bold text-slate-900 mb-1">
+                    {mode === 'pronote' ? 'Fichier Élèves (Excel ou CSV)' : 'Fichier Licenciés UNSS (Excel ou CSV)'}
+                </h3>
+                <p className="text-sm text-slate-500 mb-6 max-w-sm">
+                    Importez votre fichier d'élèves pour les ajouter ou les mettre à jour. Formats acceptés : .xlsx, .xls, .csv
+                </p>
                 
                 <label className="cursor-pointer bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-700 px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors">
-                  Sélectionner le fichier CSV
-                  <input type="file" accept=".csv" className="hidden" onChange={handleUpload} />
+                  Sélectionner un fichier
+                  <input type="file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" className="hidden" onChange={handleUpload} />
                 </label>
-                
-                {parsedData.length > 0 && <p className="text-sm text-emerald-600 font-semibold mt-4">{parsedData.length} lignes détectées</p>}
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 p-5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-slate-900 text-sm">Classe de rattachement (Optionnel)</h3>
-                  <p className="text-xs text-slate-500 mt-1">Si vous importez une classe complète, renseignez-la ici pour forcer son affectation à l'ensemble du fichier.</p>
+              {mode === 'pronote' && (
+                <div className="bg-slate-50 border border-slate-200 p-5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-900 text-sm">Classe de rattachement (Optionnel)</h3>
+                    <p className="text-xs text-slate-500 mt-1">Si vous importez une classe complète, renseignez-la ici pour l'appliquer à tous les élèves importés.</p>
+                  </div>
+                  <input 
+                    type="text" 
+                    value={targetClass}
+                    onChange={e => setTargetClass(e.target.value.toUpperCase())}
+                    placeholder="ex: 3EME A"
+                    className="px-4 py-2 w-full sm:w-48 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-slate-500 uppercase font-medium"
+                  />
                 </div>
-                <input 
-                  type="text" 
-                  value={targetClass}
-                  onChange={e => setTargetClass(e.target.value.toUpperCase())}
-                  placeholder="ex: 3EME A"
-                  className="px-4 py-2 w-full sm:w-48 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-slate-500 uppercase font-medium"
-                />
-              </div>
-
-              <div className="flex justify-end pt-4">
-                <button 
-                  disabled={parsedData.length === 0 || isProcessing}
-                  onClick={processPronote}
-                  className="flex items-center gap-2 bg-slate-900 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
-                  Étape Suivante
-                </button>
-              </div>
+              )}
             </div>
           )}
 
-          {step === 1 && mode === 'unss' && (
-            <div className="space-y-6 animate-in fade-in">
-               <div className={`p-8 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center transition-colors ${parsedData.length > 0 ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'}`}>
-                 <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${parsedData.length > 0 ? 'bg-blue-100 text-blue-600' : 'bg-white text-slate-400 shadow-sm'}`}>
-                  {parsedData.length > 0 ? <Check className="w-6 h-6" /> : <FileSpreadsheet className="w-6 h-6" />}
+          {step === 2 && (
+             <div className="space-y-6 animate-in fade-in zoom-in-95">
+                <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-4 py-3 rounded-lg flex items-center gap-3">
+                  <FileSpreadsheet className="w-5 h-5 shrink-0" />
+                  <div>
+                    <span className="font-semibold block text-sm">Fichier analysé avec succès</span>
+                    <span className="text-xs opacity-80">{parsedData.length} lignes détectées. Veuillez associer les colonnes de votre fichier avec celles de l'application.</span>
+                  </div>
                 </div>
-                <h3 className="font-bold text-slate-900 mb-1">Fichier Licenciés (UNSS)</h3>
-                <p className="text-sm text-slate-500 mb-6 max-w-sm">Importez le CSV OPUSS pour attribuer automatiquement les numéros de licence aux élèves de <b>{activeYear}</b> déjà enregistrés.</p>
-                
-                <label className="cursor-pointer bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-700 px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors">
-                  Sélectionner le fichier CSV
-                  <input type="file" accept=".csv" className="hidden" onChange={handleUpload} />
-                </label>
-                {parsedData.length > 0 && <p className="text-sm text-blue-600 font-semibold mt-4">{parsedData.length} lignes détectées</p>}
-              </div>
 
-              <div className="flex justify-end pt-4">
-                <button 
-                  disabled={parsedData.length === 0 || isProcessing}
-                  onClick={processUnss}
-                  className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
-                  Croiser et prévisualiser
-                </button>
-              </div>
-            </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                      { key: 'lastName', label: 'Nom', required: true },
+                      { key: 'firstName', label: 'Prénom', required: true },
+                      { key: 'birthDate', label: 'Date de naissance', required: mode === 'unss' },
+                      ...(mode === 'pronote' ? [
+                          { key: 'classGroup', label: 'Classe', required: false },
+                          { key: 'gender', label: 'Sexe/Genre', required: false }
+                      ] : [
+                          { key: 'licenseNumber', label: 'N° de Licence', required: true }
+                      ])
+                  ].map(field => (
+                    <div key={field.key} className="bg-white border border-slate-200 p-3 rounded-lg shadow-sm">
+                       <label className="block text-sm font-semibold text-slate-700 mb-2">
+                           {field.label} {field.required && <span className="text-red-500">*</span>}
+                       </label>
+                       <select
+                           value={columnMapping[field.key] || ''}
+                           onChange={e => setColumnMapping({...columnMapping, [field.key]: e.target.value})}
+                           className={`w-full p-2 border rounded-md text-sm ${!columnMapping[field.key] && field.required ? 'border-red-300 bg-red-50 focus:ring-red-500' : 'border-slate-300 focus:ring-indigo-500'}`}
+                       >
+                           <option value="">-- Ignorer ou Non présent --</option>
+                           {fileHeaders.map(h => (
+                               <option key={h} value={h}>{h}</option>
+                           ))}
+                       </select>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-between pt-4 border-t border-slate-100">
+                  <button onClick={() => setStep(1)} className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">
+                    Retour
+                  </button>
+                  <button 
+                    onClick={processMapping}
+                    className="flex items-center gap-2 bg-slate-900 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-slate-800 transition-all"
+                  >
+                    Valider le mapping <ArrowRight className="w-5 h-5" />
+                  </button>
+                </div>
+             </div>
           )}
 
-          {step === 2 && mode === 'pronote' && (
+          {step === 3 && mode === 'pronote' && (
              <div className="space-y-4 animate-in fade-in zoom-in-95">
                 <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -350,9 +429,9 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                         <th className="px-4 py-3">
                           <input 
                             type="checkbox" 
-                            className="rounded border-slate-300"
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                             checked={importRecords.length > 0 && importRecords.every(r => r.selected)}
-                            onChange={e => {
+                            onChange={e => { 
                                const checked = e.target.checked;
                                setImportRecords(records => records.map(r => ({...r, selected: checked})));
                             }}
@@ -361,7 +440,6 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                         <th className="px-4 py-3">État</th>
                         <th className="px-4 py-3">Nom</th>
                         <th className="px-4 py-3">Prénom</th>
-                        <th className="px-4 py-3">Date de Naissance</th>
                         <th className="px-4 py-3">Classe</th>
                       </tr>
                     </thead>
@@ -380,7 +458,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                                       return newRecords;
                                   });
                                }}
-                               className="rounded border-slate-300" 
+                               className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                              />
                           </td>
                           <td className="px-4 py-2 font-medium">
@@ -392,7 +470,6 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                           </td>
                           <td className="px-4 py-2 font-medium text-slate-900">{r.student.lastName}</td>
                           <td className="px-4 py-2">{r.student.firstName}</td>
-                          <td className="px-4 py-2 text-slate-500">{r.student.birthDate}</td>
                           <td className="px-4 py-2 font-medium">{r.student.classGroup}</td>
                         </tr>
                       ))}
@@ -400,9 +477,9 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                   </table>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                  <button onClick={() => setStep(1)} className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">
-                    Retour
+                <div className="flex justify-between pt-4 border-t border-slate-100">
+                  <button onClick={() => setStep(2)} className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">
+                    Retour au mapping
                   </button>
                   <button 
                     onClick={handleSaveAdd} 
@@ -416,12 +493,12 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
              </div>
           )}
 
-          {step === 2 && mode === 'unss' && (
+          {step === 3 && mode === 'unss' && (
              <div className="space-y-4 animate-in fade-in zoom-in-95">
                 <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Check className="w-5 h-5" />
-                    <span className="font-medium">{previewUpdateData.length} élèves trouvés (sans licence).</span>
+                    <span className="font-medium">{previewUpdateData.length} élèves correspondants (sans licence) trouvés.</span>
                   </div>
                 </div>
 
@@ -449,7 +526,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                       {previewUpdateData.length === 0 && (
                         <tr>
                           <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
-                            Aucun élève correspondant sans licence trouvé.
+                            Aucun élève correspondant sans licence trouvé. Vérifiez votre mapping de date de naissance !
                           </td>
                         </tr>
                       )}
@@ -462,9 +539,9 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                   )}
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                  <button onClick={() => setStep(1)} className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">
-                    Retour
+                <div className="flex justify-between pt-4 border-t border-slate-100">
+                  <button onClick={() => setStep(2)} className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">
+                    Retour au mapping
                   </button>
                   <button 
                     onClick={handleSaveUpdate} 
@@ -477,7 +554,6 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                 </div>
              </div>
           )}
-
         </div>
       </div>
     </div>

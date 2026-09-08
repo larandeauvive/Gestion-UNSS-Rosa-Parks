@@ -45,6 +45,7 @@ export interface Convocation {
   studentIds: string[]; // Liste des IDs des élèves
   tshirtManagerId?: string;
   snackManagerIds?: string[];
+  sessionId?: string; // ID de la séance liée
 }
 
 export interface Session {
@@ -60,6 +61,7 @@ export interface Session {
   schoolYear: string;
   enrolledStudentIds: string[]; // Élèves inscrits
   presentStudentIds: string[]; // Élèves pointés présents
+  convocationId?: string; // ID de la convocation liée
 }
 
 export interface ColumnDefinition {
