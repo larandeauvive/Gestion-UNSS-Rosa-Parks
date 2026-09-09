@@ -9,6 +9,7 @@ export interface StudentTableProps {
   onSelectAll: () => void;
   onSelectRow: (id: string) => void;
   onRowClick?: (student: Student) => void;
+  onOpussCheck?: (id: string, checked: boolean) => void;
 }
 
 export const StudentTable: React.FC<StudentTableProps> = ({
@@ -17,7 +18,8 @@ export const StudentTable: React.FC<StudentTableProps> = ({
   selectedIds,
   onSelectAll,
   onSelectRow,
-  onRowClick
+  onRowClick,
+  onOpussCheck
 }) => {
   const allSelected = students.length > 0 && selectedIds.size === students.length;
   const isIndeterminate = selectedIds.size > 0 && selectedIds.size < students.length;
@@ -86,6 +88,14 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                            </div>
                         ) : col.key === 'firstName' ? (
                            <span className="font-semibold text-slate-900">{student[col.key as string]}</span>
+                        ) : col.key === 'opussChecked' ? (
+                           <input 
+                             type="checkbox" 
+                             checked={!!student.opussChecked} 
+                             onChange={(e) => onOpussCheck?.(student.id, e.target.checked)}
+                             onClick={(e) => e.stopPropagation()}
+                             className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                           />
                         ) : (
                           student[col.key as string]
                         )}

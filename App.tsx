@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { Student, ColumnDefinition } from './types';
 import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut } from 'lucide-react';
@@ -17,6 +17,7 @@ import { Dashboard } from './components/Dashboard';
 import { CalendarView } from './components/CalendarView';
 import { importFromCSV } from './lib/importCsv';
 import { deleteMultipleStudents, updateMultipleStudents, addStudent } from './lib/db';
+import { TeacherPortal } from './components/TeacherPortal';
 
 const INITIAL_COLUMNS: ColumnDefinition[] = [
   { key: 'lastName', label: 'Nom', visible: true },
@@ -33,6 +34,7 @@ const INITIAL_COLUMNS: ColumnDefinition[] = [
   { key: 'swimmingCertificate', label: 'Savoir Nager', visible: false },
   { key: 'parentalAuth', label: 'Auto. Parentale', visible: false },
   { key: 'imageRights', label: 'Droit Image', visible: false },
+  { key: 'opussChecked', label: 'Ajout OPUSS', visible: true },
   { key: 'tshirt', label: 'Maillot', visible: true },
   { key: 'size', label: 'Taille Maillot', visible: true },
 ];
@@ -44,11 +46,13 @@ export default function App() {
   // Public Route state
   const [enrollSessionId, setEnrollSessionId] = useState<string | null>(null);
   const [isPublicCalendar, setIsPublicCalendar] = useState(false);
+  const [isPublicTeacher, setIsPublicTeacher] = useState(false);
 
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('as_auth') === 'true';
   });
+  const isAdmin = isAuthenticated;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -58,6 +62,9 @@ export default function App() {
     }
     if (params.get('public') === 'calendar') {
       setIsPublicCalendar(true);
+    }
+    if (params.get('public') === 'teacher') {
+      setIsPublicTeacher(true);
     }
   }, []);
   
@@ -97,6 +104,9 @@ export default function App() {
 
   // Load Data from Firebase
   useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    setLoading(true);
     const q = query(collection(db, 'students')); // Maybe order in memory to allow full text search across years
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Student[] = [];
@@ -120,7 +130,7 @@ export default function App() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [isAuthenticated, activeYear]);
 
   // Filter Logic
   const filteredStudents = useMemo(() => {
@@ -170,6 +180,15 @@ export default function App() {
     setSelectedIds(newSelected);
   };
 
+  const handleOpussCheck = async (id: string, checked: boolean) => {
+    try {
+      const docRef = doc(db, 'students', id);
+      await updateDoc(docRef, { opussChecked: checked });
+    } catch (e) {
+      console.error("Error updating OPUSS check", e);
+    }
+  };
+
   if (enrollSessionId) {
     return <PublicEnrollment sessionId={enrollSessionId} />;
   }
@@ -185,6 +204,15 @@ export default function App() {
           />
         </div>
       </div>
+    );
+  }
+
+  if (isPublicTeacher) {
+    return (
+      <TeacherPortal 
+        students={students.filter(s => s.schoolYear === activeYear)}
+        activeYear={activeYear}
+      />
     );
   }
 
@@ -300,57 +328,75 @@ export default function App() {
               <p className="text-slate-400 mt-2 font-medium">Plateforme Cloud de Gestion des Licenciés</p>
             </div>
             
-            <div className="flex items-center gap-3 bg-slate-800 p-2 rounded-lg border border-slate-700 relative" ref={settingsRef}>
-              <CalendarDays className="w-5 h-5 text-slate-400 ml-2" />
-              <select 
-                className="bg-transparent text-white font-semibold py-1 pr-4 pl-1 outline-none appearance-none cursor-pointer"
-                value={activeYear}
-                onChange={(e) => {
-                  setActiveYear(e.target.value);
-                  setSelectedIds(new Set());
-                }}
-              >
-                {allYears.map(year => (
-                  <option key={year} value={year} className="text-slate-900">{year}</option>
-                ))}
-              </select>
+            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4">
+              <div className="text-right sm:mr-2">
+                <div className="text-sm font-medium text-white">Administrateur</div>
+              </div>
 
-              <div className="h-5 w-px bg-slate-700 mx-1"></div>
+              <div className="flex items-center gap-3 bg-slate-800 p-2 rounded-lg border border-slate-700 relative" ref={settingsRef}>
+                <CalendarDays className="w-5 h-5 text-slate-400 ml-2" />
+                <select 
+                  className="bg-transparent text-white font-semibold py-1 pr-4 pl-1 outline-none appearance-none cursor-pointer"
+                  value={activeYear}
+                  onChange={(e) => {
+                    setActiveYear(e.target.value);
+                    setSelectedIds(new Set());
+                  }}
+                >
+                  {allYears.map(year => (
+                    <option key={year} value={year} className="text-slate-900">{year}</option>
+                  ))}
+                </select>
 
-              <button 
-                onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-slate-700 transition-colors focus:outline-none"
-                title="Paramètres"
-              >
-                 <Settings2 className="w-4 h-4" />
-              </button>
+                <div className="h-5 w-px bg-slate-700 mx-1"></div>
 
-              <button 
-                onClick={() => {
-                  localStorage.removeItem('as_auth');
-                  setIsAuthenticated(false);
-                }}
-                className="p-1.5 text-slate-400 hover:text-red-400 rounded-md hover:bg-slate-700 transition-colors focus:outline-none"
-                title="Déconnexion"
-              >
-                 <LogOut className="w-4 h-4" />
-              </button>
+                <button 
+                  onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-slate-700 transition-colors focus:outline-none"
+                  title="Paramètres"
+                >
+                   <Settings2 className="w-4 h-4" />
+                </button>
 
-              {isSettingsOpen && (
-                <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-200">
-                  <button 
-                    disabled={selectedIds.size === 0}
-                    onClick={() => {
-                      setIsRolloverOpen(true);
-                      setIsSettingsOpen(false);
-                    }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left"
-                  >
-                    <ArrowRightLeft className="w-4 h-4 text-slate-500" />
-                    Transition classe supérieure
-                  </button>
-                </div>
-              )}
+                <button 
+                  onClick={() => {
+                    localStorage.removeItem('as_auth');
+                    setIsAuthenticated(false);
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-red-400 rounded-md hover:bg-slate-700 transition-colors focus:outline-none"
+                  title="Déconnexion"
+                >
+                   <LogOut className="w-4 h-4" />
+                </button>
+
+                {isSettingsOpen && isAdmin && (
+                  <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-200">
+                    <button 
+                      onClick={() => {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('public', 'teacher');
+                        navigator.clipboard.writeText(url.toString());
+                        alert("Le lien de l'espace enseignant a été copié dans le presse-papiers.");
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded-lg transition-colors text-left mb-1"
+                    >
+                      <Users className="w-4 h-4 text-indigo-500" />
+                      Lien Espace Enseignant
+                    </button>
+                    <button 
+                      disabled={selectedIds.size === 0}
+                      onClick={() => {
+                        setIsRolloverOpen(true);
+                        setIsSettingsOpen(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left border-t border-slate-100 pt-3"
+                    >
+                      <ArrowRightLeft className="w-4 h-4 text-slate-500" />
+                      Transition classe supérieure
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -416,17 +462,24 @@ export default function App() {
                 colorClass="bg-white text-indigo-600 border-slate-200"
               />
               
-              <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-col justify-center items-center gap-2">
-                 <button
-                    onClick={handleImport}
-                    disabled={isImporting}
-                    className="w-full flex justify-center items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 rounded-lg font-medium transition-colors border border-slate-300 disabled:opacity-50"
-                  >
-                    {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-                    Assistant d'Importation
-                  </button>
-                 <p className="text-xs text-slate-400 text-center">Ajouter ou croiser des données CSV</p>
-              </div>
+              {isAdmin ? (
+                <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-col justify-center items-center gap-2">
+                   <button
+                      onClick={handleImport}
+                      disabled={isImporting}
+                      className="w-full flex justify-center items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 rounded-lg font-medium transition-colors border border-slate-300 disabled:opacity-50"
+                    >
+                      {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+                      Assistant d'Importation
+                    </button>
+                   <p className="text-xs text-slate-400 text-center">Ajouter ou croiser des données CSV</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-col justify-center items-center gap-2">
+                   <p className="text-sm font-medium text-slate-500 text-center">Mode consultation</p>
+                   <p className="text-xs text-slate-400 text-center">Contactez l'administrateur pour ajouter des licences.</p>
+                </div>
+              )}
             </div>
 
             {/* Toolbar */}
@@ -500,7 +553,8 @@ export default function App() {
               selectedIds={selectedIds}
               onSelectAll={handleSelectAll}
               onSelectRow={handleSelectRow}
-              onRowClick={(student) => setEditStudent(student)}
+              onRowClick={isAdmin ? (student) => setEditStudent(student) : undefined}
+              onOpussCheck={isAdmin ? handleOpussCheck : undefined}
             />
             
             <div className="flex justify-between items-center text-xs text-slate-500 pt-2 pb-8">

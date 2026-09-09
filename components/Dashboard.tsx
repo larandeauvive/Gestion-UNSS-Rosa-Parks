@@ -11,6 +11,7 @@ interface Props {
 }
 
 export const Dashboard: React.FC<Props> = ({ students, activeYear, onNewConvocation }) => {
+  const isAdmin = true;
   const [convocations, setConvocations] = useState<Convocation[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,7 +138,7 @@ export const Dashboard: React.FC<Props> = ({ students, activeYear, onNewConvocat
             <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center">
               <Percent className="w-5 h-5" />
             </div>
-            {isEditingSchoolTotal ? (
+            {isEditingSchoolTotal && isAdmin ? (
               <div className="flex items-center gap-2">
                 <input 
                   type="number" 
@@ -150,11 +151,12 @@ export const Dashboard: React.FC<Props> = ({ students, activeYear, onNewConvocat
               </div>
             ) : (
               <button 
-                onClick={() => setIsEditingSchoolTotal(true)}
-                className="text-slate-400 hover:text-slate-600 transition flex items-center gap-1 text-xs"
-                title="Modifier l'effectif total du collège"
+                onClick={() => isAdmin && setIsEditingSchoolTotal(true)}
+                className={`text-slate-400 hover:text-slate-600 transition flex items-center gap-1 text-xs ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`}
+                title={isAdmin ? "Modifier l'effectif total du collège" : "Effectif total du collège"}
+                disabled={!isAdmin}
               >
-                / {schoolTotal} élèves <Settings className="w-3 h-3" />
+                / {schoolTotal} élèves {isAdmin && <Settings className="w-3 h-3" />}
               </button>
             )}
           </div>

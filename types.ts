@@ -16,7 +16,8 @@ export interface Student {
   tshirt: string; // T-shirt
   size: string; // Taille
   birthDate?: string; // Date de naissance
-  [key: string]: string | undefined; // Index signature for dynamic access
+  opussChecked?: boolean; // Case à cocher pour suivi OPUSS
+  [key: string]: string | boolean | undefined; // Index signature for dynamic access
 }
 
 export interface CsvRow {

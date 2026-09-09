@@ -39,8 +39,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">Identifiant</label>
               <input 
-                type="text" 
-                value={id}
+                 type="text" 
+                 value={id}
                 onChange={e => setId(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900 transition-colors"
                 placeholder="Identifiant"
@@ -50,8 +50,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">Mot de passe</label>
               <input 
-                type="password" 
-                value={password}
+                 type="password" 
+                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900 transition-colors"
                 placeholder="Mot de passe"
