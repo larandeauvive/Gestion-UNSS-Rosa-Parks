@@ -427,8 +427,14 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                               {isPresent ? <CheckCircle2 className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
                             </button>
                             <div>
-                              <span className="font-semibold text-slate-800">{s.lastName} {s.firstName}</span>
-                              <span className="ml-2 text-xs text-slate-500">{s.classGroup}</span>
+                              <div className="font-semibold text-slate-800 flex items-center gap-1 flex-wrap">
+                                {String(s.parentalAuth).toUpperCase() !== 'OUI' && <span title="Autorisation parentale manquante" className="text-sm text-rose-500 leading-none">AP🚫</span>}
+                                {String(s.swimmingCertificate).toUpperCase() !== 'OUI' && <span title="Savoir nager non validé" className="text-sm">🏊‍♂️🚫</span>}
+                                {String(s.imageRights).toUpperCase() !== 'OUI' && <span title="Droit à l'image non validé" className="text-sm">📷🚫</span>}
+                                {String(s.paid).toUpperCase() !== 'OUI' && <span title="Paiement manquant" className="text-sm text-rose-500 font-bold leading-none">€🚫</span>}
+                                <span>{s.lastName} {s.firstName}</span>
+                              </div>
+                              <span className="text-xs text-slate-500">{s.classGroup}</span>
                             </div>
                           </div>
                           <button 
@@ -458,8 +464,14 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                       return (
                         <div key={`all_${s.id}`} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-100">
                           <div>
-                            <span className="font-medium text-slate-700">{s.lastName} {s.firstName}</span>
-                            <span className="ml-2 text-xs text-slate-400">{s.classGroup}</span>
+                            <div className="font-medium text-slate-700 flex items-center gap-1 flex-wrap">
+                                {String(s.parentalAuth).toUpperCase() !== 'OUI' && <span title="Autorisation parentale manquante" className="text-sm text-rose-500 leading-none">AP🚫</span>}
+                                {String(s.swimmingCertificate).toUpperCase() !== 'OUI' && <span title="Savoir nager non validé" className="text-sm">🏊‍♂️🚫</span>}
+                                {String(s.imageRights).toUpperCase() !== 'OUI' && <span title="Droit à l'image non validé" className="text-sm">📷🚫</span>}
+                                {String(s.paid).toUpperCase() !== 'OUI' && <span title="Paiement manquant" className="text-sm text-rose-500 font-bold leading-none">€🚫</span>}
+                                <span>{s.lastName} {s.firstName}</span>
+                            </div>
+                            <span className="text-xs text-slate-400">{s.classGroup}</span>
                           </div>
                           <button 
                             onClick={() => toggleEnrollment(s.id)}

@@ -141,8 +141,14 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
               return (
                 <div key={student.id} className={`p-4 rounded-xl border ${isEnrolled ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'} flex items-center justify-between`}>
                   <div>
-                    <div className="font-bold text-slate-800 text-lg">{student.lastName} {student.firstName}</div>
-                    <div className="text-sm text-slate-500">Classe : {student.classGroup}</div>
+                    <div className="font-bold text-slate-800 text-lg flex items-center gap-1.5 flex-wrap">
+                      {String(student.parentalAuth).toUpperCase() !== 'OUI' && <span title="Autorisation parentale manquante" className="text-base text-rose-500 leading-none mb-0.5">AP🚫</span>}
+                      {String(student.swimmingCertificate).toUpperCase() !== 'OUI' && <span title="Savoir nager non validé" className="text-base">🏊‍♂️🚫</span>}
+                      {String(student.imageRights).toUpperCase() !== 'OUI' && <span title="Droit à l'image non validé" className="text-base">📷🚫</span>}
+                      {String(student.paid).toUpperCase() !== 'OUI' && <span title="Paiement manquant" className="text-base text-rose-500 leading-none mb-0.5">€🚫</span>}
+                      <span>{student.lastName} {student.firstName}</span>
+                    </div>
+                    <div className="text-sm text-slate-500 mt-1">Classe : {student.classGroup}</div>
                     {cannotEnroll && !isEnrolled && (
                       <div className="text-xs text-amber-600 font-medium flex items-center gap-1 mt-1">
                         <AlertTriangle className="w-3 h-3" /> Pas de licence enregistrée
