@@ -13,12 +13,38 @@ interface Props {
 export const TeacherPortal: React.FC<Props> = ({ students, activeYear }) => {
   const [currentTab, setCurrentTab] = useState<'seances' | 'calendrier' | 'licences'>('seances');
   const [searchTerm, setSearchTerm] = useState('');
+  const [classFilter, setClassFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  const uniqueClasses = Array.from(new Set(students.map(s => s.classGroup).filter(Boolean))).sort();
 
   const filteredStudents = students.filter(s => {
+    // 1. Text Search
     const searchLower = searchTerm.toLowerCase();
-    return (s.lastName || '').toLowerCase().includes(searchLower) ||
-           (s.firstName || '').toLowerCase().includes(searchLower) ||
-           (s.classGroup || '').toLowerCase().includes(searchLower);
+    const matchesSearch = (s.lastName || '').toLowerCase().includes(searchLower) ||
+                          (s.firstName || '').toLowerCase().includes(searchLower) ||
+                          (s.classGroup || '').toLowerCase().includes(searchLower);
+    
+    // 2. Class Filter
+    const matchesClass = classFilter ? s.classGroup === classFilter : true;
+
+    // 3. Status Filter
+    let matchesStatus = true;
+    const isPaid = String(s.paid).toUpperCase() === 'OUI';
+    const isAuth = String(s.parentalAuth).toUpperCase() === 'OUI';
+    const hasLicense = !!s.licenseNumber;
+    // We consider it "à enregistrer" if it's paid and auth is OUI, but no license number or OPUSS unchecked
+    const isComplete = isPaid && isAuth;
+
+    if (statusFilter === 'valid') {
+      matchesStatus = isComplete && hasLicense;
+    } else if (statusFilter === 'toregister') {
+      matchesStatus = isComplete && !hasLicense;
+    } else if (statusFilter === 'invalid') {
+      matchesStatus = !isComplete;
+    }
+
+    return matchesSearch && matchesClass && matchesStatus;
   });
 
   return (
@@ -74,17 +100,39 @@ export const TeacherPortal: React.FC<Props> = ({ students, activeYear }) => {
 
         {currentTab === 'licences' && (
           <div className="space-y-4">
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4">
               <div className="relative w-full md:w-96">
                 <Search className="w-5 h-5 text-slate-400 absolute left-3 top-3" />
                 <input 
                   type="text" 
                   placeholder="Rechercher un élève, une classe..." 
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
+              
+              <select 
+                className="w-full md:w-48 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors text-slate-700"
+                value={classFilter}
+                onChange={(e) => setClassFilter(e.target.value)}
+              >
+                <option value="">Toutes les classes</option>
+                {uniqueClasses.map(cls => (
+                  <option key={cls} value={cls}>{cls}</option>
+                ))}
+              </select>
+
+              <select 
+                className="w-full md:w-64 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors text-slate-700"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="">Tous les statuts</option>
+                <option value="valid">Licence à jour</option>
+                <option value="toregister">Dossier complet (à enregistrer)</option>
+                <option value="invalid">Dossier incomplet (non à jour)</option>
+              </select>
             </div>
             
             <StudentTable 
