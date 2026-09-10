@@ -74,7 +74,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
       setEvents(prev => {
         const filtered = prev.filter(e => e.type !== 'convocation');
         const newEvents = data
-          .filter(c => c.departureDate && !isNaN(new Date(c.departureDate).getTime()))
+          .filter(c => c.departureDate && !isNaN(new Date(c.departureDate).getTime()) && !c.sessionId)
           .map(c => ({
             id: c.id,
             type: 'convocation' as const,
