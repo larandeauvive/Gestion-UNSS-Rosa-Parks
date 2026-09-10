@@ -142,11 +142,19 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
   const filteredStudents = useMemo(() => {
     return students.filter(student => {
       const searchLower = searchTerm.toLowerCase();
-      return (student.lastName || '').toLowerCase().includes(searchLower) ||
-             (student.firstName || '').toLowerCase().includes(searchLower) ||
-             (student.classGroup || '').toLowerCase().includes(searchLower);
+      const matchesSearch = (student.lastName || '').toLowerCase().includes(searchLower) ||
+                            (student.firstName || '').toLowerCase().includes(searchLower) ||
+                            (student.classGroup || '').toLowerCase().includes(searchLower);
+                            
+      if (!matchesSearch) return false;
+      
+      const audience = formData.targetAudience || 'all';
+      if (audience === 'students' && student.isAdult) return false;
+      if (audience === 'adults' && !student.isAdult) return false;
+      
+      return true;
     });
-  }, [students, searchTerm]);
+  }, [students, searchTerm, formData.targetAudience]);
 
   return (
     <div className="flex flex-col md:flex-row gap-6 min-h-[600px] h-full">
@@ -286,6 +294,31 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                   placeholder="Ex: N'oubliez pas les gourdes..."
                   rows={2}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Nombre maximum de participants (optionnel)</label>
+                <input 
+                  type="number" 
+                  min="1"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={formData.maxParticipants || ''}
+                  onChange={e => setFormData({...formData, maxParticipants: e.target.value ? parseInt(e.target.value) : undefined})}
+                  placeholder="Laisser vide pour illimité"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Public Cible</label>
+                <select 
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={formData.targetAudience || 'all'}
+                  onChange={e => setFormData({...formData, targetAudience: e.target.value as any})}
+                >
+                  <option value="all">Tous (Élèves et Adultes)</option>
+                  <option value="students">Élèves uniquement</option>
+                  <option value="adults">Adultes/Encadrants uniquement</option>
+                </select>
               </div>
 
               <div className="space-y-2">

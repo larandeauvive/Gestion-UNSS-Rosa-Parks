@@ -68,6 +68,7 @@ export const TeacherPortal: React.FC<Props> = ({ students, activeYear }) => {
     const activeColumns = [
       { key: 'lastName', label: 'Nom' },
       { key: 'firstName', label: 'Prénom' },
+      { key: 'birthDate', label: 'Né(e) le' },
       { key: 'classGroup', label: 'Classe' },
       { key: 'licenseNumber', label: 'N° Licence' },
       { key: 'paid', label: 'Payé' },
@@ -222,6 +223,7 @@ export const TeacherPortal: React.FC<Props> = ({ students, activeYear }) => {
               columns={[
                 { key: 'lastName', label: 'Nom', visible: true },
                 { key: 'firstName', label: 'Prénom', visible: true },
+                { key: 'birthDate', label: 'Né(e) le', visible: true },
                 { key: 'classGroup', label: 'Classe', visible: true },
                 { key: 'licenseNumber', label: 'N° Licence', visible: true },
                 { key: 'paid', label: 'Payé', visible: true },

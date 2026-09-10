@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { Student, ColumnDefinition } from './types';
-import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut } from 'lucide-react';
+import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut, KeyRound } from 'lucide-react';
 import { StatCard } from './components/StatCard';
 import { Modal } from './components/Modal';
 import { StudentTable } from './components/StudentTable';
@@ -13,6 +13,7 @@ import { ConvocationManager } from './components/ConvocationManager';
 import { SessionManager } from './components/SessionManager';
 import { PublicEnrollment } from './components/PublicEnrollment';
 import { LoginScreen } from './components/LoginScreen';
+import { TeacherLoginScreen } from './components/TeacherLoginScreen';
 import { Dashboard } from './components/Dashboard';
 import { CalendarView } from './components/CalendarView';
 import { importFromCSV } from './lib/importCsv';
@@ -54,6 +55,42 @@ export default function App() {
   });
   const isAdmin = isAuthenticated;
 
+  const [teacherAuth, setTeacherAuth] = useState(() => {
+    return localStorage.getItem('teacher_auth') === 'true';
+  });
+  const [teacherPassword, setTeacherPassword] = useState('ASRP2026');
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const docRef = doc(db, 'settings', 'general');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setTeacherPassword(docSnap.data().teacherPassword || 'ASRP2026');
+        } else {
+          await setDoc(docRef, { teacherPassword: 'ASRP2026' });
+        }
+      } catch(e) {
+        // ignore for now
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  const handleUpdatePassword = async () => {
+    if (!newPassword.trim()) return;
+    try {
+      await updateDoc(doc(db, 'settings', 'general'), { teacherPassword: newPassword.trim() });
+      setTeacherPassword(newPassword.trim());
+      setIsPasswordModalOpen(false);
+      setNewPassword('');
+    } catch (e) {
+      alert("Erreur lors de la mise à jour du mot de passe.");
+    }
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const session = params.get('enroll');
@@ -88,6 +125,8 @@ export default function App() {
   const [isImporting, setIsImporting] = useState(false);
   
   const [editStudent, setEditStudent] = useState<Student | null>(null);
+  const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
+  const [newMember, setNewMember] = useState<Partial<Student>>({});
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -208,6 +247,15 @@ export default function App() {
   }
 
   if (isPublicTeacher) {
+    if (!teacherAuth && !isAdmin) {
+      return <TeacherLoginScreen 
+        correctPassword={teacherPassword}
+        onLogin={() => {
+          localStorage.setItem('teacher_auth', 'true');
+          setTeacherAuth(true);
+        }} 
+      />;
+    }
     return (
       <TeacherPortal 
         students={students.filter(s => s.schoolYear === activeYear)}
@@ -384,12 +432,23 @@ export default function App() {
                       Lien Espace Enseignant
                     </button>
                     <button 
+                      onClick={() => {
+                        setNewPassword(teacherPassword);
+                        setIsPasswordModalOpen(true);
+                        setIsSettingsOpen(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded-lg transition-colors text-left border-b border-slate-100 pb-3 mb-2"
+                    >
+                      <KeyRound className="w-4 h-4 text-slate-500" />
+                      Mot de passe enseignant
+                    </button>
+                    <button 
                       disabled={selectedIds.size === 0}
                       onClick={() => {
                         setIsRolloverOpen(true);
                         setIsSettingsOpen(false);
                       }}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left border-t border-slate-100 pt-3"
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-left"
                     >
                       <ArrowRightLeft className="w-4 h-4 text-slate-500" />
                       Transition classe supérieure
@@ -463,16 +522,25 @@ export default function App() {
               />
               
               {isAdmin ? (
-                <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-col justify-center items-center gap-2">
+                <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-col justify-center items-stretch gap-2">
                    <button
                       onClick={handleImport}
                       disabled={isImporting}
-                      className="w-full flex justify-center items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 rounded-lg font-medium transition-colors border border-slate-300 disabled:opacity-50"
+                      className="flex justify-center items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 rounded-lg font-medium transition-colors border border-slate-300 disabled:opacity-50"
                     >
                       {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-                      Assistant d'Importation
+                      Importer (CSV)
                     </button>
-                   <p className="text-xs text-slate-400 text-center">Ajouter ou croiser des données CSV</p>
+                    <button
+                      onClick={() => {
+                        setNewMember({ isAdult: true, schoolYear: activeYear, paid: 'NON', parentalAuth: 'NON', imageRights: 'NON', swimmingCertificate: 'NON' });
+                        setIsAddMemberModalOpen(true);
+                      }}
+                      className="flex justify-center items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-2 px-3 rounded-lg font-medium transition-colors border border-indigo-200"
+                    >
+                      <Users className="w-4 h-4" />
+                      Ajouter un membre
+                    </button>
                 </div>
               ) : (
                 <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-col justify-center items-center gap-2">
@@ -634,6 +702,101 @@ export default function App() {
           setIsRolloverOpen(false);
         }}
       />
+
+      {isPasswordModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
+            <h2 className="text-xl font-bold text-slate-900 mb-4">Modifier le mot de passe enseignant</h2>
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500">
+                Ce mot de passe permet de protéger l'accès à l'Espace Enseignant. Partagez-le avec vos collègues avec le lien.
+              </p>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Nouveau mot de passe</label>
+                <input 
+                  type="text" 
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Ex: ASRP2026"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <button 
+                  onClick={() => setIsPasswordModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button 
+                  onClick={handleUpdatePassword}
+                  disabled={!newPassword.trim()}
+                  className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                >
+                  Enregistrer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAddMemberModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 my-auto">
+            <h2 className="text-xl font-bold text-slate-900 mb-4">Ajouter un membre</h2>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <input 
+                  type="checkbox" 
+                  id="isAdult" 
+                  checked={newMember.isAdult || false} 
+                  onChange={e => setNewMember({...newMember, isAdult: e.target.checked, classGroup: e.target.checked ? 'Adulte' : ''})} 
+                />
+                <label htmlFor="isAdult" className="text-sm font-medium text-slate-700">Ce membre est un adulte / encadrant</label>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Prénom</label>
+                  <input type="text" value={newMember.firstName || ''} onChange={e => setNewMember({...newMember, firstName: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Nom</label>
+                  <input type="text" value={newMember.lastName || ''} onChange={e => setNewMember({...newMember, lastName: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Classe</label>
+                  <input type="text" value={newMember.classGroup || ''} onChange={e => setNewMember({...newMember, classGroup: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="Ex: 6A, Adulte..." />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Date de naissance</label>
+                  <input type="text" value={newMember.birthDate || ''} onChange={e => setNewMember({...newMember, birthDate: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="JJ/MM/AAAA" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <button onClick={() => setIsAddMemberModalOpen(false)} className="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200">Annuler</button>
+                <button 
+                  onClick={async () => {
+                    if (!newMember.firstName || !newMember.lastName) return alert("Le nom et le prénom sont requis.");
+                    try {
+                      await addStudent(newMember as any);
+                      setIsAddMemberModalOpen(false);
+                      setNewMember({});
+                    } catch (e) {
+                      alert("Erreur lors de l'ajout.");
+                    }
+                  }} 
+                  className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -298,11 +298,20 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
   };
 
   const filteredStudents = students.filter(s => {
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (s.lastName || '').toLowerCase().includes(searchLower) ||
-           (s.firstName || '').toLowerCase().includes(searchLower) ||
-           (s.classGroup || '').toLowerCase().includes(searchLower);
+    let matchesSearch = true;
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      matchesSearch = (s.lastName || '').toLowerCase().includes(searchLower) ||
+                      (s.firstName || '').toLowerCase().includes(searchLower) ||
+                      (s.classGroup || '').toLowerCase().includes(searchLower);
+    }
+    if (!matchesSearch) return false;
+    
+    const audience = formData.targetAudience || 'all';
+    if (audience === 'students' && s.isAdult) return false;
+    if (audience === 'adults' && !s.isAdult) return false;
+    
+    return true;
   });
 
   const managerCounts = React.useMemo(() => {
@@ -512,6 +521,33 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1">Date et Heure de retour</label>
                     <input type="datetime-local" required className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" value={formData.returnDate || ''} onChange={e => setFormData({...formData, returnDate: e.target.value})} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Nombre maximum de participants (optionnel)</label>
+                    <input 
+                      type="number" 
+                      min="1"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      value={formData.maxParticipants || ''}
+                      onChange={e => setFormData({...formData, maxParticipants: e.target.value ? parseInt(e.target.value) : undefined})}
+                      placeholder="Laisser vide pour illimité"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Public Cible</label>
+                    <select 
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      value={formData.targetAudience || 'all'}
+                      onChange={e => setFormData({...formData, targetAudience: e.target.value as any})}
+                    >
+                      <option value="all">Tous (Élèves et Adultes)</option>
+                      <option value="students">Élèves uniquement</option>
+                      <option value="adults">Adultes/Encadrants uniquement</option>
+                    </select>
                   </div>
                 </div>
 

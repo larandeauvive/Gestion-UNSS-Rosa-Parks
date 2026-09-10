@@ -233,16 +233,17 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     }
   };
 
-  const printDocument = (type: 'liste' | 'convocation' | 'projet') => {
-    if (!selectedEvent) return;
+  const printDocument = (type: 'liste' | 'convocation' | 'projet', eventOverride?: CalendarEvent) => {
+    const targetEvent = eventOverride || selectedEvent;
+    if (!targetEvent) return;
     
-    const eventStudents = students.filter(s => selectedEvent.studentIds.includes(s.id));
-    const dateStr = format(new Date(selectedEvent.date), 'dd/MM/yyyy');
+    const eventStudents = students.filter(s => targetEvent.studentIds.includes(s.id));
+    const dateStr = format(new Date(targetEvent.date), 'dd/MM/yyyy');
     
     let title = '';
-    if (type === 'liste') title = `Liste d'appel - ${selectedEvent.title}`;
-    if (type === 'convocation') title = `Convocation - ${selectedEvent.title}`;
-    if (type === 'projet') title = `Fiche Projet - ${selectedEvent.title}`;
+    if (type === 'liste') title = `Liste d'appel - ${targetEvent.title}`;
+    if (type === 'convocation') title = `Convocation - ${targetEvent.title}`;
+    if (type === 'projet') title = `Fiche Projet - ${targetEvent.title}`;
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -269,15 +270,15 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           <h1>${title}</h1>
           <div class="meta">
             Date : <strong>${dateStr}</strong><br/>
-            Événement : <strong>${selectedEvent.title}</strong><br/>
+            Événement : <strong>${targetEvent.title}</strong><br/>
             Effectif : <strong>${eventStudents.length} élèves</strong>
           </div>
     `);
 
     if (type === 'convocation') {
-      const isSession = selectedEvent.type === 'session';
-      const eventDetails = isSession ? selectedEvent.raw as Session : null;
-      const convoDetails = !isSession ? selectedEvent.raw as Convocation : null;
+      const isSession = targetEvent.type === 'session';
+      const eventDetails = isSession ? targetEvent.raw as Session : null;
+      const convoDetails = !isSession ? targetEvent.raw as Convocation : null;
       
       const location = isSession ? eventDetails?.location : 'Non spécifié';
       const startTime = isSession ? eventDetails?.time : (convoDetails?.departureDate ? format(new Date(convoDetails.departureDate), 'HH:mm') : 'Non spécifiée');
@@ -291,8 +292,17 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           <p><strong>Heure de fin/retour :</strong> ${endTime || 'Non spécifiée'}</p>
           <p><strong>Goûter à prévoir :</strong> ${snack}</p>
         </div>
-        <p>Veuillez trouver ci-dessous la liste des élèves convoqués pour cet événement.</p>
       `);
+      
+      if (!isPublic) {
+        printWindow.document.write(`
+          <p>Veuillez trouver ci-dessous la liste des élèves convoqués pour cet événement.</p>
+        `);
+      } else {
+         printWindow.document.write(`
+          <p>Veuillez vous présenter à l'heure indiquée.</p>
+        `);
+      }
     }
 
     if (type === 'projet') {
@@ -471,12 +481,17 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-slate-100 flex justify-between items-start">
               <div>
-                <div className="flex items-center gap-3 mb-1">
+                <div className="flex flex-wrap items-center gap-3 mb-1">
                   <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider
                     ${selectedEvent.type === 'session' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}
                   `}>
                     {selectedEvent.type === 'session' ? 'Séance' : 'Convocation'}
                   </span>
+                  {(selectedEvent.raw as any).targetAudience === 'adults' && (
+                    <span className="px-2.5 py-1 text-xs font-bold uppercase tracking-wider rounded-md bg-rose-100 text-rose-700">
+                      Adultes uniquement
+                    </span>
+                  )}
                   <span className="text-sm font-medium text-slate-500">
                     {format(new Date(selectedEvent.date), 'dd MMMM yyyy', { locale: fr })}
                   </span>
@@ -599,15 +614,50 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                   <p className="text-slate-600 font-medium text-lg">Événement planifié</p>
                   <p className="text-slate-500 text-sm mb-6">Plus d'informations auprès de l'équipe encadrante.</p>
                   
-                  {selectedEvent.type === 'session' && (
-                    <button 
-                      onClick={() => window.location.href = `?enroll=${selectedEvent.id}`}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-colors shadow-sm"
-                    >
-                      <Users className="w-5 h-5" />
-                      Je m'inscris à cette séance
-                    </button>
-                  )}
+                  {(() => {
+                    const isSession = selectedEvent.type === 'session';
+                    const isConvocation = selectedEvent.type === 'convocation';
+                    
+                    let isClosed = false;
+                    let isFull = false;
+                    
+                    if (isSession) {
+                      const session = selectedEvent.raw as Session;
+                      isFull = session.maxParticipants !== undefined && (session.enrolledStudentIds || []).length >= session.maxParticipants;
+                      const isPast = new Date(selectedEvent.date).setHours(0,0,0,0) < new Date().setHours(0,0,0,0);
+                      isClosed = isFull || isPast;
+                    }
+                    
+                    if (isSession && !isClosed) {
+                      return (
+                        <button 
+                          onClick={() => window.location.href = `?enroll=${selectedEvent.id}`}
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-colors shadow-sm"
+                        >
+                          <Users className="w-5 h-5" />
+                          Je m'inscris à cette séance
+                        </button>
+                      );
+                    }
+                    
+                    if (isConvocation || (isSession && isClosed)) {
+                      return (
+                        <div className="flex flex-col items-center gap-3">
+                          {isFull && !isConvocation && <p className="text-amber-600 font-semibold mb-2">Les inscriptions sont closes (complet).</p>}
+                          {isClosed && !isFull && !isConvocation && <p className="text-amber-600 font-semibold mb-2">Les inscriptions sont closes (date passée).</p>}
+                          <button 
+                            onClick={() => printDocument('convocation')}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-colors shadow-sm"
+                          >
+                            <FileText className="w-5 h-5" />
+                            Télécharger la convocation
+                          </button>
+                        </div>
+                      );
+                    }
+                    
+                    return null;
+                  })()}
                 </div>
               )}
             </div>

@@ -17,6 +17,7 @@ export interface Student {
   size: string; // Taille
   birthDate?: string; // Date de naissance
   opussChecked?: boolean; // Case à cocher pour suivi OPUSS
+  isAdult?: boolean; // Si c'est un adulte
   [key: string]: string | boolean | undefined; // Index signature for dynamic access
 }
 
@@ -47,6 +48,7 @@ export interface Convocation {
   tshirtManagerId?: string;
   snackManagerIds?: string[];
   sessionId?: string; // ID de la séance liée
+  targetAudience?: 'students' | 'adults' | 'all';
 }
 
 export interface Session {
@@ -63,6 +65,8 @@ export interface Session {
   enrolledStudentIds: string[]; // Élèves inscrits
   presentStudentIds: string[]; // Élèves pointés présents
   convocationId?: string; // ID de la convocation liée
+  maxParticipants?: number; // Nombre maximum de participants
+  targetAudience?: 'students' | 'adults' | 'all';
 }
 
 export interface ColumnDefinition {
