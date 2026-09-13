@@ -204,6 +204,10 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
 
       if (!license || !dob || !origLastName || !origFirstName) return;
 
+      // Skip this row if the license number is already assigned to any student in the database
+      const licenseAlreadyExists = students.some(s => s.licenseNumber === license);
+      if (licenseAlreadyExists) return;
+
       const normLast = normalizeStr(origLastName);
       const normFirst = normalizeStr(origFirstName);
       const formattedDob = formatDateFr(dob);
