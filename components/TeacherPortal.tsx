@@ -4,7 +4,8 @@ import { SessionManager } from './SessionManager';
 import { CalendarView } from './CalendarView';
 import { StudentTable } from './StudentTable';
 import { ConvocationManager } from './ConvocationManager';
-import { CalendarDays, Users, Search, Activity, Printer, ClipboardList } from 'lucide-react';
+import { TeacherManager } from './TeacherManager';
+import { CalendarDays, Users, Search, Activity, Printer, ClipboardList, GraduationCap } from 'lucide-react';
 
 interface Props {
   students: Student[];
@@ -12,7 +13,7 @@ interface Props {
 }
 
 export const TeacherPortal: React.FC<Props> = ({ students, activeYear }) => {
-  const [currentTab, setCurrentTab] = useState<'seances' | 'calendrier' | 'licences' | 'convocations'>('seances');
+  const [currentTab, setCurrentTab] = useState<'seances' | 'calendrier' | 'licences' | 'convocations' | 'enseignants'>('seances');
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -136,7 +137,8 @@ export const TeacherPortal: React.FC<Props> = ({ students, activeYear }) => {
             { id: 'seances', label: 'Appel / Séances', icon: Activity },
             { id: 'convocations', label: 'Convocations', icon: ClipboardList },
             { id: 'calendrier', label: 'Calendrier', icon: CalendarDays },
-            { id: 'licences', label: 'État des Licences', icon: Users }
+            { id: 'licences', label: 'État des Licences', icon: Users },
+            { id: 'enseignants', label: 'Enseignants EPS', icon: GraduationCap }
           ].map(tab => (
             <button
               key={tab.id}
@@ -173,6 +175,10 @@ export const TeacherPortal: React.FC<Props> = ({ students, activeYear }) => {
             activeYear={activeYear}
             isPublic={true}
           />
+        )}
+
+        {currentTab === 'enseignants' && (
+          <TeacherManager />
         )}
 
         {currentTab === 'licences' && (

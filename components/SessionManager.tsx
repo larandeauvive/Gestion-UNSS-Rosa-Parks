@@ -26,8 +26,23 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
     time: '13:30',
     requireLicense: false,
     enrolledStudentIds: [],
-    presentStudentIds: []
+    presentStudentIds: [],
+    teacherIds: []
   });
+
+  const [teachers, setTeachers] = useState<{id: string, name: string}[]>([]);
+
+  useEffect(() => {
+    const qTeachers = query(collection(db, 'teachers'));
+    const unsubTeachers = onSnapshot(qTeachers, (snapshot) => {
+      const data: {id: string, name: string}[] = [];
+      snapshot.forEach(doc => {
+        data.push({ id: doc.id, name: doc.data().name });
+      });
+      setTeachers(data);
+    });
+    return () => unsubTeachers();
+  }, []);
 
   useEffect(() => {
     const q = query(collection(db, 'sessions'), where('schoolYear', '==', activeYear));
@@ -202,6 +217,11 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                     <div className="text-xs text-slate-500 mt-1">
                       {new Date(s.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} • {s.time}{s.endTime ? ` - ${s.endTime}` : ''}
                     </div>
+                    {s.teacherIds && s.teacherIds.length > 0 && (
+                      <div className="text-xs text-indigo-600 font-medium mt-1">
+                        Resp: {s.teacherIds.map(tid => teachers.find(t => t.id === tid)?.name).filter(Boolean).join(', ')}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-xs font-medium bg-white px-2 py-1 rounded-md border border-slate-200 text-slate-600">
@@ -242,9 +262,49 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                   placeholder="Ex: Entraînement Futsal"
                 />
               </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Heure de RDV</label>
+                  <input 
+                    type="time" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={formData.meetingTime || ''}
+                    onChange={e => setFormData({...formData, meetingTime: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Lieu de RDV</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={formData.meetingLocation || ''}
+                    onChange={e => setFormData({...formData, meetingLocation: e.target.value})}
+                    placeholder="Ex: Gymnase"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Passage au self</label>
+                  <input 
+                    type="time" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={formData.cafeteriaTime || ''}
+                    onChange={e => setFormData({...formData, cafeteriaTime: e.target.value})}
+                    title="Heure de passage au self (optionnelle)"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Heure de retour</label>
+                  <input 
+                    type="time" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={formData.returnTime || ''}
+                    onChange={e => setFormData({...formData, returnTime: e.target.value})}
+                  />
+                </div>
+              </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Date</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Date de la séance</label>
                   <input 
                     type="date" 
                     required
@@ -254,7 +314,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Début</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Début (Séance)</label>
                   <input 
                     type="time" 
                     required
@@ -264,7 +324,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Fin</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Fin (Séance)</label>
                   <input 
                     type="time" 
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -275,13 +335,13 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
               </div>
               
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Lieu</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Lieu de la séance</label>
                 <input 
                   type="text" 
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={formData.location || ''}
                   onChange={e => setFormData({...formData, location: e.target.value})}
-                  placeholder="Ex: Gymnase"
+                  placeholder="Ex: Stade municipal"
                 />
               </div>
 
@@ -321,6 +381,51 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                 </select>
               </div>
 
+              {teachers.length > 0 && (
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Enseignants Responsables</label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {teachers.map(t => (
+                      <label key={t.id} className="flex items-center gap-2 cursor-pointer p-2 bg-white border border-slate-200 rounded-lg hover:border-indigo-300 transition-colors">
+                        <input 
+                          type="checkbox" 
+                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                          checked={(formData.teacherIds || []).includes(t.id)}
+                          onChange={e => {
+                            const current = new Set(formData.teacherIds || []);
+                            if (e.target.checked) current.add(t.id);
+                            else current.delete(t.id);
+                            setFormData({...formData, teacherIds: Array.from(current)});
+                          }}
+                        />
+                        <span className="text-sm font-medium text-slate-700">{t.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Ouverture des inscriptions (optionnel)</label>
+                  <input 
+                    type="datetime-local" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={formData.registrationOpenDate || ''}
+                    onChange={e => setFormData({...formData, registrationOpenDate: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Fermeture des inscriptions (optionnel)</label>
+                  <input 
+                    type="datetime-local" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={formData.registrationCloseDate || ''}
+                    onChange={e => setFormData({...formData, registrationCloseDate: e.target.value})}
+                  />
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-50 border border-slate-200 rounded-lg">
                   <input 
@@ -329,7 +434,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                     checked={formData.requireLicense || false}
                     onChange={e => setFormData({...formData, requireLicense: e.target.checked})}
                   />
-                  <span className="text-sm font-semibold text-slate-700">Obligation d'être à jour de sa licence</span>
+                  <span className="text-sm font-semibold text-slate-700">Signaler si l'élève n'a pas de licence (non bloquant)</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer p-2 bg-amber-50 border border-amber-200 rounded-lg">
                   <input 

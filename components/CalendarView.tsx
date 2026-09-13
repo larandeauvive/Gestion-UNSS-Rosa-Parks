@@ -38,9 +38,16 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
   const [newEventTime, setNewEventTime] = useState('');
   const [newEventEndTime, setNewEventEndTime] = useState('');
   const [newEventLocation, setNewEventLocation] = useState('');
+  const [newEventMeetingTime, setNewEventMeetingTime] = useState('');
+  const [newEventMeetingLocation, setNewEventMeetingLocation] = useState('');
+  const [newEventCafeteriaTime, setNewEventCafeteriaTime] = useState('');
+  const [newEventReturnTime, setNewEventReturnTime] = useState('');
   const [newEventNeedSnack, setNewEventNeedSnack] = useState(false);
   const [newEventDescription, setNewEventDescription] = useState('');
   const [newEventRequireLicense, setNewEventRequireLicense] = useState(true);
+  const [newEventMaxParticipants, setNewEventMaxParticipants] = useState<number | ''>('');
+  const [newEventRegistrationOpenDate, setNewEventRegistrationOpenDate] = useState('');
+  const [newEventRegistrationCloseDate, setNewEventRegistrationCloseDate] = useState('');
   const [isSavingEvent, setIsSavingEvent] = useState(false);
 
   const [newEventGenerateConvocation, setNewEventGenerateConvocation] = useState(false);
@@ -52,9 +59,16 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     setNewEventTime(session.time || '');
     setNewEventEndTime(session.endTime || '');
     setNewEventLocation(session.location || '');
+    setNewEventMeetingTime(session.meetingTime || '');
+    setNewEventMeetingLocation(session.meetingLocation || '');
+    setNewEventCafeteriaTime(session.cafeteriaTime || '');
+    setNewEventReturnTime(session.returnTime || '');
     setNewEventNeedSnack(session.needSnack || false);
     setNewEventDescription(session.description || '');
     setNewEventRequireLicense(session.requireLicense ?? true);
+    setNewEventMaxParticipants(session.maxParticipants || '');
+    setNewEventRegistrationOpenDate(session.registrationOpenDate || '');
+    setNewEventRegistrationCloseDate(session.registrationCloseDate || '');
     setNewEventGenerateConvocation(!!session.convocationId);
     setClickedDate(new Date(session.date));
     setEditingEventId(event.id);
@@ -136,9 +150,16 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     setNewEventTime('13:30');
     setNewEventEndTime('');
     setNewEventLocation('');
+    setNewEventMeetingTime('');
+    setNewEventMeetingLocation('');
+    setNewEventCafeteriaTime('');
+    setNewEventReturnTime('');
     setNewEventNeedSnack(false);
     setNewEventDescription('');
     setNewEventRequireLicense(true);
+    setNewEventMaxParticipants('');
+    setNewEventRegistrationOpenDate('');
+    setNewEventRegistrationCloseDate('');
     setNewEventGenerateConvocation(false);
     setEditingEventId(null);
     setIsCreatingEvent(true);
@@ -157,9 +178,16 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           time: newEventTime,
           endTime: newEventEndTime,
           location: newEventLocation,
+          meetingTime: newEventMeetingTime,
+          meetingLocation: newEventMeetingLocation,
+          cafeteriaTime: newEventCafeteriaTime,
+          returnTime: newEventReturnTime,
           needSnack: newEventNeedSnack,
           description: newEventDescription,
-          requireLicense: newEventRequireLicense
+          requireLicense: newEventRequireLicense,
+          maxParticipants: newEventMaxParticipants ? Number(newEventMaxParticipants) : null,
+          registrationOpenDate: newEventRegistrationOpenDate || null,
+          registrationCloseDate: newEventRegistrationCloseDate || null
         };
         await updateDoc(doc(db, 'sessions', editingEventId), updateData);
         
@@ -169,7 +197,11 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
             competitionName: newEventName || 'Séance',
             departureDate: format(clickedDate, 'yyyy-MM-dd') + (newEventTime ? `T${newEventTime}` : 'T00:00'),
             returnDate: format(clickedDate, 'yyyy-MM-dd') + (newEventEndTime ? `T${newEventEndTime}` : 'T23:59'),
-            needSnack: newEventNeedSnack ? 'OUI' : 'NON'
+            needSnack: newEventNeedSnack ? 'OUI' : 'NON',
+            meetingTime: newEventMeetingTime,
+            meetingLocation: newEventMeetingLocation,
+            cafeteriaTime: newEventCafeteriaTime,
+            returnTime: newEventReturnTime
           };
           await updateDoc(doc(db, 'convocations', sessionDoc.convocationId), convUpdateData);
         }
@@ -180,9 +212,16 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           time: newEventTime,
           endTime: newEventEndTime,
           location: newEventLocation,
+          meetingTime: newEventMeetingTime,
+          meetingLocation: newEventMeetingLocation,
+          cafeteriaTime: newEventCafeteriaTime,
+          returnTime: newEventReturnTime,
           needSnack: newEventNeedSnack,
           description: newEventDescription,
           requireLicense: newEventRequireLicense,
+          maxParticipants: newEventMaxParticipants ? Number(newEventMaxParticipants) : undefined,
+          registrationOpenDate: newEventRegistrationOpenDate || undefined,
+          registrationCloseDate: newEventRegistrationCloseDate || undefined,
           enrolledStudentIds: [],
           presentStudentIds: [],
           schoolYear: activeYear
@@ -199,7 +238,11 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
               needPicnic: 'NON',
               schoolYear: activeYear,
               studentIds: [],
-              sessionId: sessionRef.id
+              sessionId: sessionRef.id,
+              meetingTime: newEventMeetingTime,
+              meetingLocation: newEventMeetingLocation,
+              cafeteriaTime: newEventCafeteriaTime,
+              returnTime: newEventReturnTime
            };
            const convRef = await addDoc(collection(db, 'convocations'), convData);
            await updateDoc(doc(db, 'sessions', sessionRef.id), { convocationId: convRef.id });
@@ -242,7 +285,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     
     let title = '';
     if (type === 'liste') title = `Liste d'appel - ${targetEvent.title}`;
-    if (type === 'convocation') title = `Convocation - ${targetEvent.title}`;
+    if (type === 'convocation') title = `Convocation UNSS`;
     if (type === 'projet') title = `Fiche Projet - ${targetEvent.title}`;
 
     const printWindow = window.open('', '_blank');
@@ -280,16 +323,18 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
       const eventDetails = isSession ? targetEvent.raw as Session : null;
       const convoDetails = !isSession ? targetEvent.raw as Convocation : null;
       
-      const location = isSession ? eventDetails?.location : 'Non spécifié';
-      const startTime = isSession ? eventDetails?.time : (convoDetails?.departureDate ? format(new Date(convoDetails.departureDate), 'HH:mm') : 'Non spécifiée');
-      const endTime = isSession ? eventDetails?.endTime : (convoDetails?.returnDate ? format(new Date(convoDetails.returnDate), 'HH:mm') : 'Non spécifiée');
+      const meetingTime = (isSession ? eventDetails?.meetingTime : convoDetails?.meetingTime) || 'Non spécifiée';
+      const meetingLocation = (isSession ? eventDetails?.meetingLocation : convoDetails?.meetingLocation) || 'Non spécifié';
+      const returnTime = (isSession ? eventDetails?.returnTime : convoDetails?.returnTime) || (isSession ? eventDetails?.endTime : (convoDetails?.returnDate ? format(new Date(convoDetails.returnDate), 'HH:mm') : 'Non spécifiée'));
+      const cafeteriaTime = (isSession ? eventDetails?.cafeteriaTime : convoDetails?.cafeteriaTime) || '';
       const snack = isSession ? (eventDetails?.needSnack ? 'Oui' : 'Non') : (convoDetails?.needSnack || 'Non');
       
       printWindow.document.write(`
         <div class="box">
-          <p><strong>Lieu :</strong> ${location || 'Non spécifié'}</p>
-          <p><strong>Heure de début/départ :</strong> ${startTime}</p>
-          <p><strong>Heure de fin/retour :</strong> ${endTime || 'Non spécifiée'}</p>
+          <p><strong>Lieu du RDV :</strong> ${meetingLocation}</p>
+          <p><strong>Heure du RDV :</strong> ${meetingTime}</p>
+          ${cafeteriaTime ? `<p><strong>Heure de passage au self :</strong> ${cafeteriaTime}</p>` : ''}
+          <p><strong>Heure de retour :</strong> ${returnTime}</p>
           <p><strong>Goûter à prévoir :</strong> ${snack}</p>
         </div>
       `);
@@ -730,7 +775,48 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Heure de début</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Heure de RDV</label>
+                  <input 
+                    type="time" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={newEventMeetingTime}
+                    onChange={e => setNewEventMeetingTime(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Lieu de RDV</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={newEventMeetingLocation}
+                    onChange={e => setNewEventMeetingLocation(e.target.value)}
+                    placeholder="Ex: Gymnase"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Passage au self</label>
+                  <input 
+                    type="time" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={newEventCafeteriaTime}
+                    onChange={e => setNewEventCafeteriaTime(e.target.value)}
+                    title="Heure de passage au self (optionnelle)"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Heure de retour</label>
+                  <input 
+                    type="time" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={newEventReturnTime}
+                    onChange={e => setNewEventReturnTime(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Début (Séance)</label>
                   <input 
                     type="time" 
                     required
@@ -740,7 +826,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Heure de fin</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Fin (Séance)</label>
                   <input 
                     type="time" 
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -751,13 +837,13 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Lieu</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Lieu de la séance</label>
                 <input 
                   type="text"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={newEventLocation}
                   onChange={e => setNewEventLocation(e.target.value)}
-                  placeholder="Ex: Gymnase"
+                  placeholder="Ex: Stade municipal"
                 />
               </div>
 
@@ -770,6 +856,38 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                   placeholder="Ex: Penser à prendre les maillots..."
                   rows={2}
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Nombre maximum d'inscrits</label>
+                  <input 
+                    type="number" 
+                    min="1"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={newEventMaxParticipants}
+                    onChange={e => setNewEventMaxParticipants(e.target.value ? parseInt(e.target.value) : '')}
+                    placeholder="Illimité"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Ouverture inscript.</label>
+                  <input 
+                    type="datetime-local" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={newEventRegistrationOpenDate}
+                    onChange={e => setNewEventRegistrationOpenDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Fermeture inscript.</label>
+                  <input 
+                    type="datetime-local" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={newEventRegistrationCloseDate}
+                    onChange={e => setNewEventRegistrationCloseDate(e.target.value)}
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-2 bg-amber-50 p-3 rounded-lg border border-amber-200">
@@ -794,7 +912,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                   onChange={e => setNewEventRequireLicense(e.target.checked)}
                 />
                 <label htmlFor="requireLicenseCal" className="text-sm font-semibold text-slate-700">
-                  Les élèves doivent être à jour de leur licence pour s'inscrire
+                  Signaler si l'élève n'a pas de licence (non bloquant)
                 </label>
               </div>
               

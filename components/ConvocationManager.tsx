@@ -25,6 +25,20 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
 
+  const [teachers, setTeachers] = useState<{id: string, name: string}[]>([]);
+
+  useEffect(() => {
+    const qTeachers = query(collection(db, 'teachers'));
+    const unsubTeachers = onSnapshot(qTeachers, (snapshot) => {
+      const data: {id: string, name: string}[] = [];
+      snapshot.forEach(doc => {
+        data.push({ id: doc.id, name: doc.data().name });
+      });
+      setTeachers(data);
+    });
+    return () => unsubTeachers();
+  }, []);
+
   useEffect(() => {
     if (autoCreateNew) {
       handleCreateNew();
@@ -55,7 +69,8 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
       guides: '',
       needSnack: 'NON',
       needPicnic: 'NON',
-      schoolYear: activeYear
+      schoolYear: activeYear,
+      teacherIds: []
     });
     setSelectedStudentIds(new Set());
     setIsEditing(true);
@@ -134,10 +149,13 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
     // Sort students
     convStudents.sort((a,b) => (a.lastName || '').localeCompare(b.lastName || ''));
 
+    const teacherNames = conv.teacherIds?.map(id => teachers.find(t => t.id === id)?.name).filter(Boolean).join(', ');
+    const accompagnateursStr = [teacherNames, conv.guides].filter(Boolean).join(', ') || 'Aucun';
+
     const printWindow = window.open('', '', 'height=800,width=1000');
     if (printWindow) {
       printWindow.document.write(`
-        <html><head><title>Convocation - ${conv.competitionName}</title>
+        <html><head><title>Convocation UNSS - ${conv.competitionName}</title>
         <style>
           body { font-family: sans-serif; padding: 20px; color: #1e293b; line-height: 1.5; }
           .header { text-align: center; border-bottom: 2px solid #slate-900; padding-bottom: 20px; margin-bottom: 30px; }
@@ -151,13 +169,15 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
           tr:nth-child(even) { background-color: #f8fafc; }
         </style></head><body>
         <div class="header">
-          <h1>AS Rosa Parks - Convocation Sportive</h1>
+          <h1>Convocation UNSS</h1>
           <p style="margin:0; font-weight: bold; color: #475569; font-size: 18px;">${conv.competitionName}</p>
         </div>
         <div class="meta-grid">
-          <div class="meta-item"><strong>Départ</strong><span>${new Date(conv.departureDate).toLocaleString('fr-FR', {dateStyle:'full', timeStyle:'short'})}</span></div>
-          <div class="meta-item"><strong>Retour</strong><span>${new Date(conv.returnDate).toLocaleString('fr-FR', {dateStyle:'full', timeStyle:'short'})}</span></div>
-          <div class="meta-item"><strong>Accompagnateurs</strong><span>${conv.guides || 'Aucun'}</span></div>
+          <div class="meta-item"><strong>Lieu du RDV</strong><span>${conv.meetingLocation || 'Non spécifié'}</span></div>
+          <div class="meta-item"><strong>Heure du RDV</strong><span>${conv.meetingTime || new Date(conv.departureDate).toLocaleString('fr-FR', {dateStyle:'full', timeStyle:'short'})}</span></div>
+          <div class="meta-item"><strong>Heure de retour</strong><span>${conv.returnTime || new Date(conv.returnDate).toLocaleString('fr-FR', {dateStyle:'full', timeStyle:'short'})}</span></div>
+          ${conv.cafeteriaTime ? `<div class="meta-item"><strong>Passage au self</strong><span>${conv.cafeteriaTime}</span></div>` : ''}
+          <div class="meta-item"><strong>Enseignants / Accompagnateurs</strong><span>${accompagnateursStr}</span></div>
           <div class="meta-item">
              <strong>À prévoir</strong>
              <span style="font-size: 14px; font-weight: normal;">
@@ -227,6 +247,9 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
       return (a.lastName || '').localeCompare(b.lastName || '');
     });
 
+    const teacherNames = conv.teacherIds?.map(id => teachers.find(t => t.id === id)?.name).filter(Boolean).join(', ');
+    const accompagnateursStr = [teacherNames, conv.guides].filter(Boolean).join(', ') || 'Aucun';
+
     const printWindow = window.open('', '', 'height=800,width=800');
     if (printWindow) {
       printWindow.document.write(`
@@ -248,9 +271,11 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
           <p style="margin:0; font-weight: bold; color: #475569; font-size: 18px;">${conv.competitionName}</p>
         </div>
         <div class="meta-grid">
-          <div class="meta-item"><strong>Départ</strong><span>${new Date(conv.departureDate).toLocaleString('fr-FR', {dateStyle:'full', timeStyle:'short'})}</span></div>
-          <div class="meta-item"><strong>Retour</strong><span>${new Date(conv.returnDate).toLocaleString('fr-FR', {dateStyle:'full', timeStyle:'short'})}</span></div>
-          <div class="meta-item"><strong>Accompagnateurs</strong><span>${conv.guides || 'Aucun'}</span></div>
+          <div class="meta-item"><strong>Lieu du RDV</strong><span>${conv.meetingLocation || 'Non spécifié'}</span></div>
+          <div class="meta-item"><strong>Heure du RDV</strong><span>${conv.meetingTime || new Date(conv.departureDate).toLocaleString('fr-FR', {dateStyle:'full', timeStyle:'short'})}</span></div>
+          <div class="meta-item"><strong>Heure de retour</strong><span>${conv.returnTime || new Date(conv.returnDate).toLocaleString('fr-FR', {dateStyle:'full', timeStyle:'short'})}</span></div>
+          ${conv.cafeteriaTime ? `<div class="meta-item"><strong>Passage au self</strong><span>${conv.cafeteriaTime}</span></div>` : ''}
+          <div class="meta-item"><strong>Enseignants / Accompagnateurs</strong><span>${accompagnateursStr}</span></div>
           <div class="meta-item">
              <strong>À prévoir</strong>
              <span style="font-size: 14px; font-weight: normal;">
@@ -432,9 +457,13 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
               <div className="p-6 flex-1 overflow-y-auto">
                  <h3 className="font-bold text-slate-900 mb-4 border-b border-slate-100 pb-2">Détails Logistiques</h3>
                  <div className="grid grid-cols-3 gap-4 mb-8">
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                      <span className="text-xs font-semibold text-slate-500 uppercase">Accompagnateurs</span>
-                      <p className="font-bold text-slate-900 mt-1">{activeConvocation.guides || 'Aucun'}</p>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 col-span-3 lg:col-span-1">
+                      <span className="text-xs font-semibold text-slate-500 uppercase">Enseignants Responsables</span>
+                      <p className="font-bold text-slate-900 mt-1">
+                        {activeConvocation.teacherIds?.length 
+                          ? activeConvocation.teacherIds.map(id => teachers.find(t => t.id === id)?.name).filter(Boolean).join(', ')
+                          : activeConvocation.guides || 'Aucun'}
+                      </p>
                     </div>
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                       <span className="text-xs font-semibold text-slate-500 uppercase">Goûter</span>
@@ -508,9 +537,28 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Nom de la compétition</label>
-                  <input type="text" required className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" value={formData.competitionName || ''} onChange={e => setFormData({...formData, competitionName: e.target.value})} placeholder="ex: Championnat Académique Futsal" />
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Titre de la convocation</label>
+                  <input type="text" required className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" value={formData.competitionName || ''} onChange={e => setFormData({...formData, competitionName: e.target.value})} placeholder="ex: Convocation UNSS" />
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Lieu du RDV</label>
+                    <input type="text" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" value={formData.meetingLocation || ''} onChange={e => setFormData({...formData, meetingLocation: e.target.value})} placeholder="ex: Gymnase" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Heure du RDV</label>
+                    <input type="time" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" value={formData.meetingTime || ''} onChange={e => setFormData({...formData, meetingTime: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Passage au self</label>
+                    <input type="time" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" value={formData.cafeteriaTime || ''} onChange={e => setFormData({...formData, cafeteriaTime: e.target.value})} title="Heure de passage au self (optionnelle)" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Heure de retour</label>
+                    <input type="time" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" value={formData.returnTime || ''} onChange={e => setFormData({...formData, returnTime: e.target.value})} />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -519,10 +567,34 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
                     <input type="datetime-local" required className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" value={formData.departureDate || ''} onChange={e => setFormData({...formData, departureDate: e.target.value})} />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Date et Heure de retour</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Date et Heure de retour (Fin)</label>
                     <input type="datetime-local" required className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900" value={formData.returnDate || ''} onChange={e => setFormData({...formData, returnDate: e.target.value})} />
                   </div>
                 </div>
+
+                {teachers.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Enseignants Responsables</label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {teachers.map(t => (
+                        <label key={t.id} className="flex items-center gap-2 cursor-pointer p-2 bg-white border border-slate-200 rounded-lg hover:border-indigo-300 transition-colors">
+                          <input 
+                            type="checkbox" 
+                            className="rounded text-indigo-600 focus:ring-indigo-500"
+                            checked={(formData.teacherIds || []).includes(t.id)}
+                            onChange={e => {
+                              const current = new Set(formData.teacherIds || []);
+                              if (e.target.checked) current.add(t.id);
+                              else current.delete(t.id);
+                              setFormData({...formData, teacherIds: Array.from(current)});
+                            }}
+                          />
+                          <span className="text-sm font-medium text-slate-700">{t.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>

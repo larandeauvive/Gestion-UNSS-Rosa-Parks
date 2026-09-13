@@ -35,12 +35,18 @@ export interface CsvRow {
   "Taille": string;
 }
 
+export interface Teacher {
+  id: string;
+  name: string;
+}
+
 export interface Convocation {
   id: string;
   competitionName: string;
   departureDate: string;
   returnDate: string;
   guides: string; // accompagnateurs
+  teacherIds?: string[]; // Enseignants responsables
   needSnack: string; // OUI/NON
   needPicnic: string; // OUI/NON
   schoolYear: string; 
@@ -49,6 +55,10 @@ export interface Convocation {
   snackManagerIds?: string[];
   sessionId?: string; // ID de la séance liée
   targetAudience?: 'students' | 'adults' | 'all';
+  meetingTime?: string; // Heure de RDV
+  meetingLocation?: string; // Lieu de RDV
+  cafeteriaTime?: string; // Heure de passage au self
+  returnTime?: string; // Heure de retour
 }
 
 export interface Session {
@@ -57,6 +67,7 @@ export interface Session {
   time: string; // Horaire de début (ex: "13:30")
   endTime?: string; // Horaire de fin (ex: "15:30")
   location?: string; // Lieu de la séance
+  teacherIds?: string[]; // Enseignants responsables
   needSnack?: boolean; // Besoin d'un goûter (true/false)
   description?: string; // Informations supplémentaires
   requireLicense: boolean; // Obligation d'être à jour de sa licence
@@ -67,6 +78,12 @@ export interface Session {
   convocationId?: string; // ID de la convocation liée
   maxParticipants?: number; // Nombre maximum de participants
   targetAudience?: 'students' | 'adults' | 'all';
+  meetingTime?: string; // Heure de RDV
+  meetingLocation?: string; // Lieu de RDV
+  cafeteriaTime?: string; // Heure de passage au self
+  returnTime?: string; // Heure de retour
+  registrationOpenDate?: string; // Date d'ouverture des inscriptions
+  registrationCloseDate?: string; // Date de fermeture des inscriptions
 }
 
 export interface ColumnDefinition {
