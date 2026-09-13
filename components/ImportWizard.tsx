@@ -44,6 +44,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
   const [importRecords, setImportRecords] = useState<{ student: Partial<Student> & Omit<Student, 'id'>, isDuplicate: boolean, selected: boolean }[]>([]);
   const [previewUpdateData, setPreviewUpdateData] = useState<{ id: string, licenseNumber: string, originalStudent: Student }[]>([]);
   const [conflictsData, setConflictsData] = useState<{ id: string, licenseNumber: string, originalStudent: Student, unssBirthDate: string, selected: boolean }[]>([]);
+  const [unmatchedUnss, setUnmatchedUnss] = useState<{ unssLastName: string, unssFirstName: string, unssBirthDate: string, licenseNumber: string, selectedStudentId: string | null }[]>([]);
   const [missingStudents, setMissingStudents] = useState<{ student: Student, selected: boolean }[]>([]);
   const [targetClass, setTargetClass] = useState('');
 
@@ -193,6 +194,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
 
     const updates: { id: string, licenseNumber: string, originalStudent: Student }[] = [];
     const newConflicts: { id: string, licenseNumber: string, originalStudent: Student, unssBirthDate: string, selected: boolean }[] = [];
+    const newUnmatched: { unssLastName: string, unssFirstName: string, unssBirthDate: string, licenseNumber: string, selectedStudentId: string | null }[] = [];
 
     parsedData.forEach(row => {
       const license = (row[licenseNumber] || '').trim();
@@ -256,12 +258,22 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
              licenseNumber: license,
              originalStudent: bestMatch
            });
+           return;
         }
       }
+
+      newUnmatched.push({
+        unssLastName: origLastName,
+        unssFirstName: origFirstName,
+        unssBirthDate: dob,
+        licenseNumber: license,
+        selectedStudentId: null
+      });
     });
 
     setPreviewUpdateData(updates);
     setConflictsData(newConflicts);
+    setUnmatchedUnss(newUnmatched);
     setStep(3);
     setIsProcessing(false);
   };
@@ -328,13 +340,20 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
       let batch = writeBatch(db);
       let count = 0;
       
+      const manualMatches = unmatchedUnss
+        .filter(u => u.selectedStudentId !== null)
+        .map(u => ({
+          id: u.selectedStudentId!,
+          licenseNumber: u.licenseNumber
+        }));
+
       const allUpdates = [
-        ...previewUpdateData,
+        ...previewUpdateData.map(u => ({ id: u.id, licenseNumber: u.licenseNumber })),
         ...conflictsData.filter(c => c.selected).map(c => ({
           id: c.id,
-          licenseNumber: c.licenseNumber,
-          originalStudent: c.originalStudent
-        }))
+          licenseNumber: c.licenseNumber
+        })),
+        ...manualMatches
       ];
 
       for (const update of allUpdates) {
@@ -730,13 +749,60 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                   </div>
                 )}
 
+                {unmatchedUnss.length > 0 && (
+                  <div className="mt-6">
+                    <div className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-lg flex items-center gap-2 mb-4">
+                      <span className="font-medium">⚠️ {unmatchedUnss.length} licenciés UNSS n'ont pas été reconnus. Associez-les manuellement :</span>
+                    </div>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[300px] overflow-y-auto bg-white shadow-sm">
+                      <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-semibold sticky top-0 border-b border-slate-200">
+                          <tr>
+                            <th className="px-4 py-3">Licencié UNSS</th>
+                            <th className="px-4 py-3">Date UNSS</th>
+                            <th className="px-4 py-3">Associer à l'élève...</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {unmatchedUnss.map((u, i) => (
+                            <tr key={i} className="hover:bg-slate-50">
+                              <td className="px-4 py-3 font-medium text-slate-900">{u.unssLastName} {u.unssFirstName}</td>
+                              <td className="px-4 py-3 text-slate-500">{formatDateFr(u.unssBirthDate)}</td>
+                              <td className="px-4 py-3">
+                                <select 
+                                  value={u.selectedStudentId || ''}
+                                  onChange={(e) => {
+                                    const newArr = [...unmatchedUnss];
+                                    newArr[i].selectedStudentId = e.target.value || null;
+                                    setUnmatchedUnss(newArr);
+                                  }}
+                                  className="w-full rounded-md border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500 shadow-sm"
+                                >
+                                  <option value="">-- Ne pas associer --</option>
+                                  {students
+                                    .filter(s => s.schoolYear === activeYear && !s.licenseNumber && !previewUpdateData.some(p => p.id === s.id) && !conflictsData.some(c => c.id === s.id))
+                                    .sort((a, b) => a.lastName.localeCompare(b.lastName))
+                                    .map(s => (
+                                      <option key={s.id} value={s.id}>{s.lastName} {s.firstName} ({formatDateFr(s.birthDate)})</option>
+                                    ))
+                                  }
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex justify-between pt-4 border-t border-slate-100 mt-6">
                   <button onClick={() => setStep(2)} className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">
                     Retour au mapping
                   </button>
                   <button 
                     onClick={handleSaveUpdate} 
-                    disabled={isProcessing || (previewUpdateData.length === 0 && conflictsData.filter(c => c.selected).length === 0)}
+                    disabled={isProcessing || (previewUpdateData.length === 0 && conflictsData.filter(c => c.selected).length === 0 && unmatchedUnss.filter(u => u.selectedStudentId).length === 0)}
                     className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white font-medium hover:bg-blue-700 rounded-xl transition-all disabled:opacity-50"
                   >
                     {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
