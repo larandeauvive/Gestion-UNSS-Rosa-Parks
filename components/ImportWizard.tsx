@@ -31,7 +31,7 @@ function levenshtein(a: string, b: string): number {
 }
 
 function normalizeStr(str: string) {
-  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, activeYear, onSuccess, students }) => {
@@ -204,6 +204,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
 
       const normLast = normalizeStr(origLastName);
       const normFirst = normalizeStr(origFirstName);
+      const formattedDob = formatDateFr(dob);
 
       const yearStudents = students.filter(s => s.schoolYear === activeYear && !s.licenseNumber);
       
@@ -213,7 +214,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
       );
 
       if (exactNameMatch) {
-         if (exactNameMatch.birthDate === dob) {
+         if (formatDateFr(exactNameMatch.birthDate) === formattedDob) {
            updates.push({
              id: exactNameMatch.id,
              licenseNumber: license,
@@ -231,7 +232,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
          return; 
       }
 
-      const dobMatches = yearStudents.filter(s => s.birthDate === dob);
+      const dobMatches = yearStudents.filter(s => formatDateFr(s.birthDate) === formattedDob);
       if (dobMatches.length > 0) {
         let bestMatch = null;
         let bestScore = Infinity;
