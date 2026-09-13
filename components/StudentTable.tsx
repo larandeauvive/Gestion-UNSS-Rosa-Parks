@@ -1,6 +1,7 @@
 import React from 'react';
 import { Student, ColumnDefinition } from '../types';
 import { Trash2, ArrowRightLeft, CalendarDays } from 'lucide-react';
+import { formatDateFr } from '../lib/utils';
 
 export interface StudentTableProps {
   students: Student[];
@@ -97,6 +98,8 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                              onClick={(e) => e.stopPropagation()}
                              className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
                            />
+                        ) : col.key === 'birthDate' ? (
+                           <span>{formatDateFr(student[col.key as string])}</span>
                         ) : (
                           student[col.key as string]
                         )}

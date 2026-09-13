@@ -4,6 +4,7 @@ import { Upload, X, Check, FileSpreadsheet, Loader2, Play, Users, ArrowRight } f
 import { db } from '../lib/firebase';
 import { collection, writeBatch, doc } from 'firebase/firestore';
 import { Student } from '../types';
+import { formatDateFr } from '../lib/utils';
 
 interface ImportWizardProps {
   isOpen: boolean;
@@ -608,7 +609,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                       {previewUpdateData.slice(0, 50).map((u, i) => (
                         <tr key={i} className="hover:bg-slate-50">
                           <td className="px-4 py-3 font-medium text-slate-900">{u.originalStudent.lastName} {u.originalStudent.firstName}</td>
-                          <td className="px-4 py-3 text-slate-500">{u.originalStudent.birthDate}</td>
+                          <td className="px-4 py-3 text-slate-500">{formatDateFr(u.originalStudent.birthDate)}</td>
                           <td className="px-4 py-3">
                             <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-blue-100 text-blue-700 font-mono text-xs font-semibold">
                               {u.licenseNumber}

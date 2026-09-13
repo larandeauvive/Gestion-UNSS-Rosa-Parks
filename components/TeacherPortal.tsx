@@ -6,6 +6,7 @@ import { StudentTable } from './StudentTable';
 import { ConvocationManager } from './ConvocationManager';
 import { TeacherManager } from './TeacherManager';
 import { CalendarDays, Users, Search, Activity, Printer, ClipboardList, GraduationCap } from 'lucide-react';
+import { formatDateFr } from '../lib/utils';
 
 interface Props {
   students: Student[];
@@ -103,7 +104,7 @@ export const TeacherPortal: React.FC<Props> = ({ students, activeYear }) => {
             <tbody>
               ${dataToProcess.map(s => `
                 <tr>
-                  ${activeColumns.map(c => `<td>${s[c.key] || ''}</td>`).join('')}
+                  ${activeColumns.map(c => `<td>${c.key === 'birthDate' ? formatDateFr(s[c.key] as string) : (s[c.key] || '')}</td>`).join('')}
                 </tr>
               `).join('')}
             </tbody>
