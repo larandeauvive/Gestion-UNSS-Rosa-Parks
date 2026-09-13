@@ -43,6 +43,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
   const [isProcessing, setIsProcessing] = useState(false);
   const [importRecords, setImportRecords] = useState<{ student: Partial<Student> & Omit<Student, 'id'>, isDuplicate: boolean, selected: boolean }[]>([]);
   const [previewUpdateData, setPreviewUpdateData] = useState<{ id: string, licenseNumber: string, originalStudent: Student }[]>([]);
+  const [conflictsData, setConflictsData] = useState<{ id: string, licenseNumber: string, originalStudent: Student, unssBirthDate: string, selected: boolean }[]>([]);
   const [missingStudents, setMissingStudents] = useState<{ student: Student, selected: boolean }[]>([]);
   const [targetClass, setTargetClass] = useState('');
 
@@ -191,6 +192,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
     }
 
     const updates: { id: string, licenseNumber: string, originalStudent: Student }[] = [];
+    const newConflicts: { id: string, licenseNumber: string, originalStudent: Student, unssBirthDate: string, selected: boolean }[] = [];
 
     parsedData.forEach(row => {
       const license = (row[licenseNumber] || '').trim();
@@ -198,22 +200,51 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
       const origFirstName = (row[firstName] || '').trim();
       const dob = (row[birthDate] || '').trim();
 
-      if (!license || !dob || (!origLastName && !origFirstName)) return;
+      if (!license || !dob || !origLastName || !origFirstName) return;
 
-      const potentialMatches = students.filter(s => s.schoolYear === activeYear && s.birthDate === dob);
+      const normLast = normalizeStr(origLastName);
+      const normFirst = normalizeStr(origFirstName);
 
-      if (potentialMatches.length > 0) {
+      const yearStudents = students.filter(s => s.schoolYear === activeYear && !s.licenseNumber);
+      
+      const exactNameMatch = yearStudents.find(s => 
+        normalizeStr(s.lastName) === normLast && 
+        normalizeStr(s.firstName) === normFirst
+      );
+
+      if (exactNameMatch) {
+         if (exactNameMatch.birthDate === dob) {
+           updates.push({
+             id: exactNameMatch.id,
+             licenseNumber: license,
+             originalStudent: exactNameMatch
+           });
+         } else {
+           newConflicts.push({
+             id: exactNameMatch.id,
+             licenseNumber: license,
+             originalStudent: exactNameMatch,
+             unssBirthDate: dob,
+             selected: false
+           });
+         }
+         return; 
+      }
+
+      const dobMatches = yearStudents.filter(s => s.birthDate === dob);
+      if (dobMatches.length > 0) {
         let bestMatch = null;
         let bestScore = Infinity;
-
-        const uFirstName = normalizeStr(origFirstName);
         
-        for (const student of potentialMatches) {
+        for (const student of dobMatches) {
           const sFirstName = normalizeStr(student.firstName);
-          const score = levenshtein(sFirstName, uFirstName);
+          const sLastName = normalizeStr(student.lastName);
+          const scoreFirst = levenshtein(sFirstName, normFirst);
+          const scoreLast = levenshtein(sLastName, normLast);
+          const totalScore = scoreFirst + scoreLast;
           
-          if (score < bestScore) {
-            bestScore = score;
+          if (totalScore < bestScore) {
+            bestScore = totalScore;
             bestMatch = student;
           }
         }
@@ -229,6 +260,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
     });
 
     setPreviewUpdateData(updates);
+    setConflictsData(newConflicts);
     setStep(3);
     setIsProcessing(false);
   };
@@ -295,7 +327,16 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
       let batch = writeBatch(db);
       let count = 0;
       
-      for (const update of previewUpdateData) {
+      const allUpdates = [
+        ...previewUpdateData,
+        ...conflictsData.filter(c => c.selected).map(c => ({
+          id: c.id,
+          licenseNumber: c.licenseNumber,
+          originalStudent: c.originalStudent
+        }))
+      ];
+
+      for (const update of allUpdates) {
         const docRef = doc(db, "students", update.id);
         batch.update(docRef, { licenseNumber: update.licenseNumber });
         count++;
@@ -617,7 +658,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                           </td>
                         </tr>
                       ))}
-                      {previewUpdateData.length === 0 && (
+                      {previewUpdateData.length === 0 && conflictsData.length === 0 && (
                         <tr>
                           <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
                             Aucun élève correspondant sans licence trouvé. Vérifiez votre mapping de date de naissance !
@@ -633,13 +674,68 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                   )}
                 </div>
 
-                <div className="flex justify-between pt-4 border-t border-slate-100">
+                {conflictsData.length > 0 && (
+                  <div className="mt-6">
+                    <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg flex items-center gap-2 mb-4">
+                      <span className="font-medium">⚠️ {conflictsData.length} élèves portent le même nom, mais leur date de naissance diffère. Cochez ceux que vous souhaitez quand même associer.</span>
+                    </div>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[300px] overflow-y-auto bg-white shadow-sm">
+                      <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-semibold sticky top-0 border-b border-slate-200">
+                          <tr>
+                            <th className="px-4 py-3 w-12 text-center">
+                               <input type="checkbox" 
+                                      className="rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                      checked={conflictsData.length > 0 && conflictsData.every(c => c.selected)}
+                                      onChange={e => {
+                                        const isChecked = e.target.checked;
+                                        setConflictsData(conflictsData.map(c => ({...c, selected: isChecked})));
+                                      }}
+                               />
+                            </th>
+                            <th className="px-4 py-3">Élève</th>
+                            <th className="px-4 py-3">Date base de données</th>
+                            <th className="px-4 py-3">Date UNSS (Différence)</th>
+                            <th className="px-4 py-3">N° Licence UNSS</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {conflictsData.map((c, i) => (
+                            <tr key={i} className="hover:bg-slate-50">
+                              <td className="px-4 py-3 text-center">
+                                <input type="checkbox"
+                                       className="rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                       checked={c.selected}
+                                       onChange={(e) => {
+                                          const newArr = [...conflictsData];
+                                          newArr[i].selected = e.target.checked;
+                                          setConflictsData(newArr);
+                                       }}
+                                />
+                              </td>
+                              <td className="px-4 py-3 font-medium text-slate-900">{c.originalStudent.lastName} {c.originalStudent.firstName}</td>
+                              <td className="px-4 py-3 text-slate-500">{formatDateFr(c.originalStudent.birthDate)}</td>
+                              <td className="px-4 py-3 text-amber-600 font-medium">{formatDateFr(c.unssBirthDate)}</td>
+                              <td className="px-4 py-3">
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-blue-100 text-blue-700 font-mono text-xs font-semibold">
+                                  {c.licenseNumber}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-4 border-t border-slate-100 mt-6">
                   <button onClick={() => setStep(2)} className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors">
                     Retour au mapping
                   </button>
                   <button 
                     onClick={handleSaveUpdate} 
-                    disabled={isProcessing || previewUpdateData.length === 0}
+                    disabled={isProcessing || (previewUpdateData.length === 0 && conflictsData.filter(c => c.selected).length === 0)}
                     className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white font-medium hover:bg-blue-700 rounded-xl transition-all disabled:opacity-50"
                   >
                     {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
