@@ -5,6 +5,7 @@ import { Student, ColumnDefinition } from './types';
 import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut, KeyRound } from 'lucide-react';
 import { StatCard } from './components/StatCard';
 import { Modal } from './components/Modal';
+import { BackupManager } from './components/BackupManager';
 import { StudentTable } from './components/StudentTable';
 import { ImportWizard } from './components/ImportWizard';
 import { YearRolloverWizard } from './components/YearRolloverWizard';
@@ -119,6 +120,7 @@ export default function App() {
   const [columns, setColumns] = useState<ColumnDefinition[]>(INITIAL_COLUMNS);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportType, setExportType] = useState<'csv'|'print'>('csv');
+  const [isBackupManagerOpen, setIsBackupManagerOpen] = useState(false);
   
   const [isRolloverOpen, setIsRolloverOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -443,6 +445,16 @@ export default function App() {
                       Mot de passe enseignant
                     </button>
                     <button 
+                      onClick={() => {
+                        setIsBackupManagerOpen(true);
+                        setIsSettingsOpen(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded-lg transition-colors text-left border-b border-slate-100 pb-3 mb-2"
+                    >
+                      <Database className="w-4 h-4 text-slate-500" />
+                      Sauvegarde & Restauration
+                    </button>
+                    <button 
                       disabled={selectedIds.size === 0}
                       onClick={() => {
                         setIsRolloverOpen(true);
@@ -683,6 +695,11 @@ export default function App() {
         onSuccess={() => {
           // Success handled in the component (alerts or just closes)
         }}
+      />
+      
+      <BackupManager
+        isOpen={isBackupManagerOpen}
+        onClose={() => setIsBackupManagerOpen(false)}
       />
 
       <Modal 
