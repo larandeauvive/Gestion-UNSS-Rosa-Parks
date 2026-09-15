@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs, writeBatch, setDoc, orderBy } from '../lib/firestore-mock';
 import { db } from '../lib/firebase';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Student, Session } from '../types';
 import { PlusCircle, Calendar, Trash2, CheckCircle2, Circle, Users, Save, Link2 } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -12,61 +12,50 @@ interface SessionManagerProps {
 
 export function SessionManager({ students, activeYear }: SessionManagerProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
+  
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null);
-
   
   const [isCreating, setIsCreating] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceCount, setRecurrenceCount] = useState(4);
   const [formData, setFormData] = useState<Partial<Session>>({
-    name: 'Entraînement',
-    date: new Date().toISOString().slice(0, 10),
+    date: new Date().toISOString().split('T')[0],
     time: '13:30',
     requireLicense: false,
-    enrolledStudentIds: [],
-    presentStudentIds: [],
     teacherIds: []
   });
 
-  const [teachers, setTeachers] = useState<{id: string, name: string}[]>([]);
+  const newSession = formData;
+  const [editingSession, setEditingSession] = useState<Session | null>(null);
 
   useEffect(() => {
     const qTeachers = query(collection(db, 'teachers'));
-    const unsubTeachers = onSnapshot(qTeachers, (snapshot) => {
-      const data: {id: string, name: string}[] = [];
-      snapshot.forEach(doc => {
-        data.push({ id: doc.id, name: doc.data().name });
-      });
+    const unsubscribeTeachers = onSnapshot(qTeachers, (snapshot: any) => {
+      const data: any[] = [];
+      snapshot.forEach((doc: any) => data.push({ id: doc.id, ...doc.data() }));
       setTeachers(data);
     });
-    return () => unsubTeachers();
-  }, []);
 
-  useEffect(() => {
     const q = query(collection(db, 'sessions'), where('schoolYear', '==', activeYear));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Session[] = [];
-      snapshot.forEach(doc => {
-        data.push({ id: doc.id, ...doc.data() } as Session);
-      });
-      data.sort((a, b) => {
-        const dateA = new Date(a.date + 'T' + (a.time || '00:00')).getTime();
-        const dateB = new Date(b.date + 'T' + (b.time || '00:00')).getTime();
-        return dateB - dateA;
-      });
+    const unsubscribeSessions = onSnapshot(q, (snapshot: any) => {
+      const data: any[] = [];
+      snapshot.forEach((doc: any) => data.push({ id: doc.id, ...doc.data() }));
+      data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setSessions(data);
-      if (!activeSessionId && data.length > 0) {
-        setActiveSessionId(data[0].id);
-      }
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribeTeachers();
+      unsubscribeSessions();
+    };
   }, [activeYear]);
 
-  const activeSession = sessions.find(s => s.id === activeSessionId);
-
-  const handleCreate = async (e: React.FormEvent) => {
+const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.date) return;
     try {
@@ -78,11 +67,17 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
         d.setDate(d.getDate() + (i * 7));
         const dateStr = d.toISOString().slice(0, 10);
         
-        const docRef = await addDoc(collection(db, 'sessions'), {
-          ...formData,
-          date: dateStr,
-          schoolYear: activeYear
-        });
+        
+      
+      const docRef = await addDoc(collection(db, 'sessions'), {
+        ...newSession,
+        schoolYear: activeYear,
+        enrolledStudentIds: [],
+        presentStudentIds: [],
+        requireLicense: newSession.requireLicense || false
+      });
+ // Mock for success
+
         if (i === 0) firstDocId = docRef.id;
       }
       

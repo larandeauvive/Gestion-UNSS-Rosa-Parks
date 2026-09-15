@@ -1,7 +1,9 @@
+import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs, writeBatch, setDoc, orderBy } from '../lib/firestore-mock';
+import { db } from '../lib/firebase';
 import React, { useState, useEffect } from 'react';
 import { Student } from '../types';
-import { db } from '../lib/firebase';
-import { collection, doc, writeBatch } from 'firebase/firestore';
+import { useDatabase } from '../hooks/useDatabase';
+
 import { X, ChevronRight, Loader2, Play } from 'lucide-react';
 
 interface Props {

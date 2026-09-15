@@ -1,6 +1,7 @@
+import { useDatabase } from "./hooks/useDatabase";
+
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from './lib/firebase';
+
 import { Student, ColumnDefinition } from './types';
 import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut, KeyRound } from 'lucide-react';
 import { StatCard } from './components/StatCard';
@@ -42,7 +43,7 @@ const INITIAL_COLUMNS: ColumnDefinition[] = [
 ];
 
 export default function App() {
-  const [students, setStudents] = useState<Student[]>([]);
+  
   const [loading, setLoading] = useState(true);
   
   // Public Route state
@@ -63,27 +64,11 @@ export default function App() {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
 
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const docRef = doc(db, 'settings', 'general');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setTeacherPassword(docSnap.data().teacherPassword || 'ASRP2026');
-        } else {
-          await setDoc(docRef, { teacherPassword: 'ASRP2026' });
-        }
-      } catch(e) {
-        // ignore for now
-      }
-    };
-    fetchSettings();
-  }, []);
 
   const handleUpdatePassword = async () => {
     if (!newPassword.trim()) return;
     try {
-      await updateDoc(doc(db, 'settings', 'general'), { teacherPassword: newPassword.trim() });
+      
       setTeacherPassword(newPassword.trim());
       setIsPasswordModalOpen(false);
       setNewPassword('');
@@ -108,6 +93,11 @@ export default function App() {
   
   // View State
   const [activeYear, setActiveYear] = useState<string>('2025-2026');
+  
+  const addStudent = async (student) => mutate({ collection: 'students', action: 'add', payload: student });
+  const updateMultipleStudents = async (ids, payload) => mutate({ action: 'batch', operations: ids.map(id => ({ collection: 'students', action: 'update', id, payload })) });
+  const deleteMultipleStudents = async (ids) => mutate({ action: 'batch', operations: ids.map(id => ({ collection: 'students', action: 'delete', id })) });
+  
   const [currentTab, setCurrentTab] = useState<'eleves'|'convocations'|'dashboard'|'seances'|'calendrier'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
@@ -143,35 +133,21 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Load Data from Firebase
+  
+  const { students, loading: dbLoading, mutate } = useDatabase();
+
   useEffect(() => {
     if (!isAuthenticated) return;
-    
-    setLoading(true);
-    const q = query(collection(db, 'students')); // Maybe order in memory to allow full text search across years
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Student[] = [];
-      snapshot.forEach(doc => {
-        data.push({ id: doc.id, ...doc.data() } as Student);
-      });
-      // Sort alphabetically by Last Name
-      data.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
-      setStudents(data);
-      setLoading(false);
-      
-      // Auto-update active year if none and data exists
-      if (data.length > 0) {
-        const years = Array.from(new Set(data.map(s => s.schoolYear).filter(Boolean))).sort().reverse();
-        if (years.length > 0 && !years.includes(activeYear)) {
-          setActiveYear(years[0]);
-        }
+    setLoading(dbLoading);
+    const sorted = [...students].sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
+    if (sorted.length > 0) {
+      const years = Array.from(new Set(sorted.map(s => s.schoolYear).filter(Boolean))).sort().reverse();
+      if (years.length > 0 && !years.includes(activeYear)) {
+        setActiveYear(years[0]);
       }
-    }, (err) => {
-      console.error(err);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [isAuthenticated, activeYear]);
+    }
+  }, [students, isAuthenticated, dbLoading, activeYear]);
+  
 
   // Filter Logic
   const filteredStudents = useMemo(() => {
@@ -223,8 +199,9 @@ export default function App() {
 
   const handleOpussCheck = async (id: string, checked: boolean) => {
     try {
-      const docRef = doc(db, 'students', id);
-      await updateDoc(docRef, { opussChecked: checked });
+      
+      await updateMultipleStudents([id], { opussChecked: checked });
+
     } catch (e) {
       console.error("Error updating OPUSS check", e);
     }

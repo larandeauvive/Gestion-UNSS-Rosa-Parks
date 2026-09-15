@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs, writeBatch, setDoc, orderBy } from '../lib/firestore-mock';
 import { db } from '../lib/firebase';
+import React, { useState, useEffect } from 'react';
+
+import { useDatabase } from '../hooks/useDatabase';
 import { Convocation, Student } from '../types';
 import { PlusCircle, Trash2, Printer, Search, X, Save, Edit3, ChevronRight } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';

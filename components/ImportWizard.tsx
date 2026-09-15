@@ -1,8 +1,10 @@
+import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs, writeBatch, setDoc, orderBy } from '../lib/firestore-mock';
+import { db } from '../lib/firebase';
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { Upload, X, Check, FileSpreadsheet, Loader2, Play, Users, ArrowRight } from 'lucide-react';
-import { db } from '../lib/firebase';
-import { collection, writeBatch, doc } from 'firebase/firestore';
+import { useDatabase } from '../hooks/useDatabase';
+
 import { Student } from '../types';
 import { formatDateFr } from '../lib/utils';
 

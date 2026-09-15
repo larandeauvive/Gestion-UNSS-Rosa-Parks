@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { doc, getDoc, collection, getDocs, query, where, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs, writeBatch, setDoc, orderBy } from '../lib/firestore-mock';
 import { db } from '../lib/firebase';
+import React, { useState, useEffect, useMemo } from 'react';
+
+import { useDatabase } from '../hooks/useDatabase';
 import { Student, Session } from '../types';
 import { CheckCircle2, Search, AlertTriangle, ShieldCheck } from 'lucide-react';
 
