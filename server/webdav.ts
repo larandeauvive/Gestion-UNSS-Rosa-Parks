@@ -99,6 +99,8 @@ export function mutateDatabase(operations: any[]): Promise<any> {
                 const idx = newData[op.collection].findIndex((i: any) => i.id === op.id);
                 if (idx !== -1) {
                   newData[op.collection][idx] = { ...newData[op.collection][idx], ...op.payload };
+                } else {
+                  newData[op.collection].push({ id: op.id, ...op.payload });
                 }
               } else if (op.action === 'delete') {
                 newData[op.collection] = newData[op.collection].filter((i: any) => i.id !== op.id);

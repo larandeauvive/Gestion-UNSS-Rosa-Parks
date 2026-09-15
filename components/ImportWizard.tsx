@@ -84,6 +84,15 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
             newMapping.classGroup = findHeader(['classe', 'rattachement']);
             newMapping.birthDate = findHeader(['né(e)', 'naissance', 'date']);
             newMapping.gender = findHeader(['sexe', 'genre']);
+            newMapping.paid = findHeader(['payé', 'paiement', 'regle', 'cotisation']);
+            newMapping.amount = findHeader(['montant', 'prix']);
+            newMapping.paymentMethod = findHeader(['mode', 'espece', 'cheque', 'moyen']);
+            newMapping.checkNumber = findHeader(['numéro de chèque', 'n° de chèque', 'num cheque']);
+            newMapping.parentalAuth = findHeader(['autorisation', 'parentale']);
+            newMapping.imageRights = findHeader(['image', 'droit']);
+            newMapping.swimmingCertificate = findHeader(['nager', 'savoir nager', 'natation']);
+            newMapping.tshirt = findHeader(['t-shirt', 'tshirt', 'maillot']);
+            newMapping.size = findHeader(['taille']);
         } else {
             newMapping.lastName = findHeader(['nom']);
             newMapping.firstName = findHeader(['prénom', 'prenom']);
@@ -109,7 +118,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
 
   const processPronote = () => {
     setIsProcessing(true);
-    const { lastName, firstName, classGroup, birthDate, gender } = columnMapping;
+    const { lastName, firstName, classGroup, birthDate, gender, paid, amount, paymentMethod, checkNumber, parentalAuth, imageRights, swimmingCertificate, tshirt, size } = columnMapping;
 
     if (!lastName || !firstName) {
         alert("Veuillez mapper au moins le Nom et le Prénom.");
@@ -157,15 +166,16 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
           classGroup: targetClass || extractedClass || (existingStudent?.classGroup || ''),
           schoolYear: activeYear,
           licenseNumber: existingStudent?.licenseNumber || '',
-          paid: existingStudent?.paid || 'NON',
-          amount: existingStudent?.amount || '',
-          paymentMethod: existingStudent?.paymentMethod || '',
-          parentalAuth: existingStudent?.parentalAuth || '',
-          imageRights: existingStudent?.imageRights || '',
-          tshirt: existingStudent?.tshirt || '',
-          size: existingStudent?.size || '',
+          paid: paid ? (row[paid] || 'NON') : (existingStudent?.paid || 'NON'),
+          amount: amount ? (row[amount] || '') : (existingStudent?.amount || ''),
+          paymentMethod: paymentMethod ? (row[paymentMethod] || '') : (existingStudent?.paymentMethod || ''),
+          checkNumber: checkNumber ? (row[checkNumber] || '') : (existingStudent?.checkNumber || ''),
+          parentalAuth: parentalAuth ? (row[parentalAuth] || '') : (existingStudent?.parentalAuth || ''),
+          imageRights: imageRights ? (row[imageRights] || '') : (existingStudent?.imageRights || ''),
+          tshirt: tshirt ? (row[tshirt] || '') : (existingStudent?.tshirt || ''),
+          size: size ? (row[size] || '') : (existingStudent?.size || ''),
           gender: gender ? (row[gender] || '') : (existingStudent?.gender || ''),
-          swimmingCertificate: existingStudent?.swimmingCertificate || 'NON'
+          swimmingCertificate: swimmingCertificate ? (row[swimmingCertificate] || 'NON') : (existingStudent?.swimmingCertificate || 'NON')
         },
         isDuplicate: !!existingStudent,
         selected: !existingStudent
@@ -408,7 +418,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
               className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${mode === 'pronote' ? 'border-slate-900 text-slate-900 bg-slate-50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
               onClick={() => { setMode('pronote'); setParsedData([]); }}
             >
-              1. Ajouter des élèves
+              1. Ajouter / Compléter des élèves
             </button>
             <button 
               className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${mode === 'unss' ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
@@ -430,7 +440,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                     {mode === 'pronote' ? 'Fichier Élèves (Excel ou CSV)' : 'Fichier Licenciés UNSS (Excel ou CSV)'}
                 </h3>
                 <p className="text-sm text-slate-500 mb-6 max-w-sm">
-                    Importez votre fichier d'élèves pour les ajouter ou les mettre à jour. Formats acceptés : .xlsx, .xls, .csv
+                    {mode === 'pronote' ? "Importez votre fichier d'élèves pour les ajouter ou compléter leurs fiches. Formats acceptés : .xlsx, .xls, .csv" : "Importez votre fichier d'élèves pour les ajouter ou les mettre à jour. Formats acceptés : .xlsx, .xls, .csv"}
                 </p>
                 
                 <label className="cursor-pointer bg-white border border-slate-200 shadow-sm hover:bg-slate-50 text-slate-700 px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors">
@@ -474,7 +484,16 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
                       { key: 'birthDate', label: 'Date de naissance', required: mode === 'unss' },
                       ...(mode === 'pronote' ? [
                           { key: 'classGroup', label: 'Classe', required: false },
-                          { key: 'gender', label: 'Sexe/Genre', required: false }
+                          { key: 'gender', label: 'Sexe/Genre', required: false },
+                          { key: 'paid', label: 'Payé (OUI/NON)', required: false },
+                          { key: 'amount', label: 'Montant', required: false },
+                          { key: 'paymentMethod', label: 'Mode de Paiement', required: false },
+                          { key: 'checkNumber', label: 'N° de Chèque', required: false },
+                          { key: 'parentalAuth', label: 'Autorisation Parentale', required: false },
+                          { key: 'imageRights', label: 'Droit à l\'image', required: false },
+                          { key: 'swimmingCertificate', label: 'Savoir nager', required: false },
+                          { key: 'tshirt', label: 'T-shirt (OUI/NON)', required: false },
+                          { key: 'size', label: 'Taille', required: false }
                       ] : [
                           { key: 'licenseNumber', label: 'N° de Licence', required: true }
                       ])
