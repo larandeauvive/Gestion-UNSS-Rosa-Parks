@@ -3,7 +3,7 @@ import { useDatabase } from "./hooks/useDatabase";
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 
 import { Student, ColumnDefinition } from './types';
-import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut, KeyRound } from 'lucide-react';
+import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut, KeyRound, AlertTriangle } from 'lucide-react';
 import { StatCard } from './components/StatCard';
 import { Modal } from './components/Modal';
 import { BackupManager } from './components/BackupManager';
@@ -21,6 +21,7 @@ import { CalendarView } from './components/CalendarView';
 import { importFromCSV } from './lib/importCsv';
 import { deleteMultipleStudents, updateMultipleStudents, addStudent } from './lib/db';
 import { TeacherPortal } from './components/TeacherPortal';
+import { NuageBadge } from './components/NuageBadge';
 
 const INITIAL_COLUMNS: ColumnDefinition[] = [
   { key: 'lastName', label: 'Nom', visible: true },
@@ -134,7 +135,7 @@ export default function App() {
   }, []);
 
   
-  const { students, loading: dbLoading, mutate } = useDatabase();
+  const { students, loading: dbLoading, error: dbError, mutate } = useDatabase();
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -214,7 +215,10 @@ export default function App() {
   if (isPublicCalendar) {
     return (
       <div className="min-h-screen bg-slate-50 p-6">
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto space-y-4">
+          <div className="flex justify-end">
+            <NuageBadge />
+          </div>
           <CalendarView 
             students={students.filter(s => s.schoolYear === activeYear)}
             activeYear={activeYear}
@@ -236,10 +240,15 @@ export default function App() {
       />;
     }
     return (
-      <TeacherPortal 
-        students={students.filter(s => s.schoolYear === activeYear)}
-        activeYear={activeYear}
-      />
+      <div className="min-h-screen bg-slate-50">
+        <div className="p-4 flex justify-end max-w-7xl mx-auto">
+          <NuageBadge />
+        </div>
+        <TeacherPortal 
+          students={students.filter(s => s.schoolYear === activeYear)}
+          activeYear={activeYear}
+        />
+      </div>
     );
   }
 
@@ -352,10 +361,14 @@ export default function App() {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <h1 className="text-4xl font-extrabold tracking-tight">AS Rosa Parks</h1>
-              <p className="text-slate-400 mt-2 font-medium">Plateforme Cloud de Gestion des Licenciés</p>
+              <div className="flex items-center gap-3 mt-2">
+                <p className="text-slate-400 font-medium">Plateforme de Gestion des Licenciés</p>
+                <NuageBadge variant="dark" className="hidden sm:flex" />
+              </div>
             </div>
             
             <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4">
+              <NuageBadge variant="dark" className="sm:hidden" />
               <div className="text-right sm:mr-2">
                 <div className="text-sm font-medium text-white">Administrateur</div>
               </div>
@@ -487,6 +500,16 @@ export default function App() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 -mt-10 space-y-6">
         
+        {dbError && (
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-4 rounded-xl flex items-start gap-3 shadow-sm mb-6">
+            <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0 text-red-600" />
+            <div>
+              <h3 className="font-semibold text-red-900">Problème de connexion avec Nuage / Nextcloud</h3>
+              <p className="text-sm mt-1">{dbError}</p>
+            </div>
+          </div>
+        )}
+
         {currentTab === 'eleves' && (
           <>
             {/* Stats Row */}

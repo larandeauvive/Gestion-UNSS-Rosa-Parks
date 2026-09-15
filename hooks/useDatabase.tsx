@@ -44,7 +44,7 @@ export const DatabaseProvider = ({ children }: { children: React.ReactNode }) =>
       }
       setError(null);
     } catch (e: any) {
-      console.error(e);
+      
       setError(e.message);
     } finally {
       setLoading(false);

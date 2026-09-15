@@ -23,8 +23,8 @@ async function startServer() {
       const data = await getDatabase();
       res.json(data);
     } catch (e: any) {
-      console.error("Error fetching db:", e.message);
-      res.status(500).json({ error: 'Failed to fetch database' });
+      
+      res.status(500).json({ error: 'Failed to fetch database', message: e.message });
     }
   });
 
@@ -47,7 +47,7 @@ async function startServer() {
       const newData = await mutateDatabase(opsToRun);
       res.json({ success: true, data: newData });
     } catch (e: any) {
-      console.error("Error mutating db:", e.message);
+      console.log("Error mutating db:", e.message);
       res.status(500).json({ error: 'Failed to mutate database', message: e.message });
     }
   });
@@ -61,7 +61,7 @@ async function startServer() {
       const newData = await mutateDatabase([{ action: 'overwrite', payload: data }]);
       res.json({ success: true, data: newData });
     } catch (e: any) {
-      console.error("Error restoring db:", e.message);
+      console.log("Error restoring db:", e.message);
       res.status(500).json({ error: 'Failed to restore database', message: e.message });
     }
   });
@@ -79,7 +79,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*all', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

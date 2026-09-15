@@ -3,7 +3,14 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const URL = process.env.WEBDAV_URL!;
+let URL = process.env.WEBDAV_URL || '';
+if (URL && !URL.endsWith('.json')) {
+  if (!URL.endsWith('/')) {
+    URL += '/';
+  }
+  URL += 'database.json';
+}
+
 const USERNAME = process.env.WEBDAV_USERNAME!;
 const PASSWORD = process.env.WEBDAV_PASSWORD!;
 
@@ -29,7 +36,7 @@ async function processQueue() {
       try {
         await task();
       } catch (e) {
-        console.error("Queue task failed:", e);
+        console.log("Queue task failed:", e);
       }
     }
   }
@@ -59,13 +66,24 @@ export async function getDatabase(forceRefresh = false) {
     const response = await axios.get(URL, { auth, headers, validateStatus: (status) => status === 200 || status === 304 });
     
     if (response.status === 200) {
-      cachedData = response.data;
+      if (typeof response.data === 'string') {
+        if (response.data.includes('WebDAV interface')) {
+          throw new Error("Invalid WebDAV URL: The URL points to a WebDAV directory or interface, not a file. Please ensure your WEBDAV_URL ends with a filename, for example: '/database.json'");
+        }
+        try {
+          cachedData = JSON.parse(response.data);
+        } catch {
+          throw new Error("Invalid database format: Expected a JSON object but received text from the server.");
+        }
+      } else {
+        cachedData = response.data;
+      }
       cachedETag = response.headers['etag'] || null;
     }
     
     return cachedData;
   } catch (e) {
-    console.error("Failed to fetch WebDAV database:", e);
+    
     throw e;
   }
 }
@@ -81,7 +99,7 @@ export function mutateDatabase(operations: any[]): Promise<any> {
             const db = await getDatabase(true);
             
             // Deep clone before mutating
-            const newData = JSON.parse(JSON.stringify(db));
+            const newData = db ? JSON.parse(JSON.stringify(db)) : { students: [], sessions: [], convocations: [], teachers: [] };
             
             for (const op of operations) {
               if (op.action === 'overwrite') {

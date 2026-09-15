@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lock } from 'lucide-react';
+import { NuageBadge } from './NuageBadge';
 
 interface LoginScreenProps {
   onLogin: () => void;
@@ -21,6 +22,9 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+      <div className="mb-6">
+        <NuageBadge />
+      </div>
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
         <div className="bg-slate-900 p-8 text-center">
           <div className="mx-auto w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4">
