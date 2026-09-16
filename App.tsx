@@ -10,6 +10,7 @@ import { BackupManager } from './components/BackupManager';
 import { StudentTable } from './components/StudentTable';
 import { ImportWizard } from './components/ImportWizard';
 import { YearRolloverWizard } from './components/YearRolloverWizard';
+import { ResetModal } from './components/ResetModal';
 import { EditStudentModal } from './components/EditStudentModal';
 import { ConvocationManager } from './components/ConvocationManager';
 import { SessionManager } from './components/SessionManager';
@@ -114,6 +115,7 @@ export default function App() {
   const [isBackupManagerOpen, setIsBackupManagerOpen] = useState(false);
   
   const [isRolloverOpen, setIsRolloverOpen] = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   
@@ -455,6 +457,16 @@ export default function App() {
                       <ArrowRightLeft className="w-4 h-4 text-slate-500" />
                       Transition classe supérieure
                     </button>
+                    <button 
+                      onClick={() => {
+                        setIsResetModalOpen(true);
+                        setIsSettingsOpen(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors text-left mt-2 border-t border-slate-100 pt-3"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Réinitialiser les données
+                    </button>
                   </div>
                 )}
               </div>
@@ -695,6 +707,11 @@ export default function App() {
         onSuccess={() => {
           // Success handled in the component (alerts or just closes)
         }}
+      />
+
+      <ResetModal 
+        isOpen={isResetModalOpen}
+        onClose={() => setIsResetModalOpen(false)}
       />
       
       <BackupManager

@@ -127,9 +127,10 @@ export function mutateDatabase(operations: any[]): Promise<any> {
             
             // Upload with optimistic concurrency
             const headers: any = { 'Content-Type': 'application/json' };
-            if (cachedETag) {
-              headers['If-Match'] = cachedETag;
-            }
+            // Some WebDAV servers (like Nextcloud) have issues with If-Match ETags
+            // if (cachedETag) {
+            //  headers['If-Match'] = cachedETag;
+            // }
             
             const putRes = await axios.put(URL, newData, { auth, headers });
             
