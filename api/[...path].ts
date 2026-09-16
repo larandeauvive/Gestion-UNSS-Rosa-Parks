@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { getDatabase, mutateDatabase, initializeDatabaseIfNeeded } from '../server/webdav.js';
+import { getDatabase, mutateDatabase, initializeDatabaseIfNeeded } from '../server/webdav';
 
 const app = express();
 app.use(cors());
