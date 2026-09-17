@@ -13,11 +13,15 @@ async function pollDb() {
   try {
     const res = await fetch('/api/db');
     if (res.ok) {
-      memoryDb = await res.json();
-      listeners.forEach(l => l());
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        memoryDb = await res.json();
+        listeners.forEach(l => l());
+      }
     }
   } catch (e) {
-    console.error("Polling error:", e);
+    // Silently ignore polling errors during server restarts or network drops
+    console.warn("Background sync paused (server unreachable).");
   }
 }
 

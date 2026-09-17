@@ -111,7 +111,7 @@ export function mutateDatabase(operations: any[]): Promise<any> {
               if (!col) newData[op.collection] = [];
               
               if (op.action === 'add') {
-                const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+                const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
                 newData[op.collection].push({ id: newId, ...op.payload });
               } else if (op.action === 'update') {
                 const idx = newData[op.collection].findIndex((i: any) => i.id === op.id);
