@@ -413,41 +413,48 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center">
-            <CalendarIcon className="w-5 h-5" />
+          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-sm border border-indigo-100">
+            <CalendarIcon className="w-6 h-6" />
           </div>
-          <h2 className="text-xl font-bold text-slate-900 capitalize">
-            {format(currentMonth, 'MMMM yyyy', { locale: fr })}
-          </h2>
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 capitalize tracking-tight">
+              {format(currentMonth, 'MMMM yyyy', { locale: fr })}
+            </h2>
+            <p className="text-sm font-semibold text-slate-500 mt-0.5">
+              Gérez les séances et convocations
+            </p>
+          </div>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {!isPublic && (
             <button 
               onClick={handleShare}
-              className="hidden sm:flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg font-medium transition-colors mr-2"
+              className="hidden sm:flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl font-bold transition-all shadow-sm"
               title="Partager le calendrier en lecture seule"
             >
               <Share2 className="w-4 h-4" />
               <span className="text-sm">Partager</span>
             </button>
           )}
-          <button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200">
-            <ChevronLeft className="w-5 h-5 text-slate-600" />
-          </button>
-          <button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200">
-            <ChevronRight className="w-5 h-5 text-slate-600" />
-          </button>
+          <div className="flex items-center bg-slate-100/80 p-1 rounded-xl border border-slate-200/60">
+            <button onClick={prevMonth} className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-600">
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button onClick={nextMonth} className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-600">
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Calendar Grid */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-md shadow-slate-200/50 overflow-hidden mb-6">
+        <div className="grid grid-cols-7 border-b border-slate-200/80 bg-slate-50/50">
           {weekDays.map(day => (
-            <div key={day} className="p-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <div key={day} className="p-3.5 text-center text-[11px] font-bold text-slate-500 uppercase tracking-widest">
               {day}
             </div>
           ))}
@@ -465,21 +472,24 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
               <div 
                 key={day.toString()} 
                 onClick={() => handleDayClick(day)}
-                className={`group min-h-[120px] p-2 border-b border-r border-slate-100 transition-colors ${!isPublic ? 'cursor-pointer hover:bg-slate-50' : ''}
-                  ${!isCurrentMonth ? 'bg-slate-50 opacity-50' : 'bg-white'}
+                className={`group min-h-[140px] p-2 border-b border-r border-slate-100/80 transition-all duration-200 ${!isPublic ? 'cursor-pointer hover:bg-slate-50/80' : ''}
+                  ${!isCurrentMonth ? 'bg-slate-50/40 opacity-40' : 'bg-white'}
                   ${dayIdx % 7 === 6 ? 'border-r-0' : ''}
                 `}
               >
-                <div className="flex justify-between items-start mb-1">
-                  <div className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full
-                    ${isSameDay(day, new Date()) ? 'bg-indigo-600 text-white' : 'text-slate-600'}
+                <div className="flex justify-between items-start mb-1.5">
+                  <div className={`text-sm font-bold w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-200
+                    ${isSameDay(day, new Date()) 
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 ring-2 ring-indigo-600 ring-offset-2' 
+                      : 'text-slate-600 group-hover:text-indigo-600 group-hover:bg-indigo-50'
+                    }
                   `}>
                     {format(day, 'd')}
                   </div>
                   {!isPublic && (
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleDayClick(day); }}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-indigo-600 transition-opacity rounded"
+                      className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all rounded-lg"
                       title="Ajouter un événement"
                     >
                       <PlusCircle className="w-4 h-4" />
@@ -487,20 +497,20 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                   )}
                 </div>
                 
-                <div className="space-y-1 mt-1">
+                <div className="space-y-1.5 mt-2">
                   {dayEvents.map(event => (
                     <button
                       key={event.id}
                       onClick={(e) => { e.stopPropagation(); setSelectedEvent(event); }}
-                      className={`w-full text-left px-2 py-1.5 rounded text-xs font-semibold truncate transition-colors border
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold truncate transition-all duration-200 border
                         ${event.type === 'session' 
-                          ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' 
-                          : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200/60 hover:bg-indigo-100 hover:border-indigo-300 hover:shadow-sm' 
+                          : 'bg-emerald-50/80 text-emerald-700 border-emerald-200/60 hover:bg-emerald-100 hover:border-emerald-300 hover:shadow-sm'
                         }
                       `}
                       title={event.title}
                     >
-                      {event.title}
+                      <span className="truncate">{event.title}</span>
                     </button>
                   ))}
                 </div>
@@ -511,54 +521,58 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
       </div>
 
       {/* Legend */}
-      <div className="flex gap-4 items-center text-sm font-medium text-slate-500 px-2">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded bg-indigo-400"></div>
-          Séances & Entraînements
+      <div className="flex flex-wrap gap-6 items-center text-sm font-semibold text-slate-600 px-4 py-3 bg-white rounded-xl border border-slate-200/80 shadow-sm inline-flex mb-8">
+        <div className="flex items-center gap-2.5">
+          <div className="w-3.5 h-3.5 rounded bg-indigo-500 shadow-sm"></div>
+          <span>Séances & Entraînements</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded bg-emerald-400"></div>
-          Convocations & Évènements
+        <div className="flex items-center gap-2.5">
+          <div className="w-3.5 h-3.5 rounded bg-emerald-500 shadow-sm"></div>
+          <span>Convocations & Évènements</span>
         </div>
       </div>
 
       {/* Event Details Modal */}
       {selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-start">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200 border border-slate-200/50">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-start">
               <div>
-                <div className="flex flex-wrap items-center gap-3 mb-1">
-                  <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider
-                    ${selectedEvent.type === 'session' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}
+                <div className="flex flex-wrap items-center gap-3 mb-2">
+                  <span className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest
+                    ${selectedEvent.type === 'session' ? 'bg-indigo-100/80 text-indigo-700' : 'bg-emerald-100/80 text-emerald-700'}
                   `}>
                     {selectedEvent.type === 'session' ? 'Séance' : 'Convocation'}
                   </span>
                   {(selectedEvent.raw as any).targetAudience === 'adults' && (
-                    <span className="px-2.5 py-1 text-xs font-bold uppercase tracking-wider rounded-md bg-rose-100 text-rose-700">
+                    <span className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest rounded-lg bg-rose-100 text-rose-700">
                       Adultes uniquement
                     </span>
                   )}
-                  <span className="text-sm font-medium text-slate-500">
+                  <span className="text-sm font-semibold text-slate-500">
                     {format(new Date(selectedEvent.date), 'dd MMMM yyyy', { locale: fr })}
                   </span>
                 </div>
-                <h2 className="text-2xl font-bold text-slate-900 mt-2 mb-2">{selectedEvent.title}</h2>
-                <div className="flex flex-col gap-1">
+                <h2 className="text-3xl font-black text-slate-900 mt-3 mb-3 tracking-tight">{selectedEvent.title}</h2>
+                <div className="flex flex-col gap-2">
                   {selectedEvent.type === 'session' && (selectedEvent.raw as Session).time && (
-                    <p className="text-slate-600 font-medium text-sm">
-                      🕒 {(selectedEvent.raw as Session).time} 
+                    <p className="text-slate-600 font-semibold text-sm flex items-center gap-2">
+                      <span className="text-lg">🕒</span> {(selectedEvent.raw as Session).time} 
                       {(selectedEvent.raw as Session).endTime ? ` - ${(selectedEvent.raw as Session).endTime}` : ''}
                     </p>
                   )}
                   {selectedEvent.type === 'session' && (selectedEvent.raw as Session).location && (
-                    <p className="text-slate-600 font-medium text-sm">📍 {(selectedEvent.raw as Session).location}</p>
+                    <p className="text-slate-600 font-semibold text-sm flex items-center gap-2">
+                      <span className="text-lg">📍</span> {(selectedEvent.raw as Session).location}
+                    </p>
                   )}
                   {selectedEvent.type === 'session' && (selectedEvent.raw as Session).needSnack && (
-                    <p className="text-amber-600 font-medium text-sm">🍪 Goûter à prévoir</p>
+                    <p className="text-amber-600 font-bold text-sm flex items-center gap-2 bg-amber-50 px-3 py-1.5 rounded-lg w-fit mt-1">
+                      <span className="text-lg">🍪</span> Goûter à prévoir
+                    </p>
                   )}
                   {selectedEvent.type === 'session' && (selectedEvent.raw as Session).description && (
-                    <p className="text-slate-500 text-sm mt-1 bg-white p-2 rounded border border-slate-200 inline-block">
+                    <p className="text-slate-600 font-medium text-sm mt-3 bg-slate-50 p-4 rounded-xl border border-slate-200/80 shadow-sm inline-block">
                       {(selectedEvent.raw as Session).description}
                     </p>
                   )}
