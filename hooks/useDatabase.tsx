@@ -45,24 +45,13 @@ export const DatabaseProvider = ({ children }: { children: React.ReactNode }) =>
       }
       setError(null);
       isFirstLoad.current = false;
-      setLoading(false);
     } catch (e: any) {
       console.warn("Database fetch error:", e.message);
-      
-      if (e.message.includes("401") || e.message.includes("403") || e.message.includes("identifiants")) {
-        setError(e.message);
-        setLoading(false);
-        return;
-      }
-
       if (isFirstLoad.current) {
-        // If it's the first load and the server is down, keep loading state and retry soon
-        console.log("Retrying initial connection in 2s...");
-        setTimeout(loadData, 2000);
-      } else {
-        // Just ignore transient errors on subsequent polls
-        setLoading(false);
+         setError(e.message);
       }
+    } finally {
+      setLoading(false);
     }
   }, []);
 
