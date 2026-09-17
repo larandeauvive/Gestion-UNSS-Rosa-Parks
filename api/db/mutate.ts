@@ -1,4 +1,4 @@
-import { mutateDatabase, initializeDatabaseIfNeeded } from '../../server/webdav';
+import { mutateDatabase, initializeDatabaseIfNeeded } from '../webdav';
 
 let dbInitialized = false;
 
