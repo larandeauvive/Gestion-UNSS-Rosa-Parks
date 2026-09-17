@@ -30,6 +30,7 @@ export const DatabaseProvider = ({ children }: { children: React.ReactNode }) =>
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isFirstLoad = React.useRef(true);
 
   const loadData = useCallback(async () => {
     try {
@@ -43,9 +44,12 @@ export const DatabaseProvider = ({ children }: { children: React.ReactNode }) =>
         });
       }
       setError(null);
+      isFirstLoad.current = false;
     } catch (e: any) {
-      
-      setError(e.message);
+      console.warn("Database fetch error:", e.message);
+      if (isFirstLoad.current || e.message.includes("401") || e.message.includes("403")) {
+        setError(e.message);
+      }
     } finally {
       setLoading(false);
     }
