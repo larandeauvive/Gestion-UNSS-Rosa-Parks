@@ -1,7 +1,6 @@
-import { mutateDatabase, initializeDatabaseIfNeeded } from '../webdav';
+import { mutateDatabase, initializeDatabaseIfNeeded } from '../../server-utils/webdav';
 
 let dbInitialized = false;
-
 const ensureDb = async () => {
     if (!dbInitialized) {
         await initializeDatabaseIfNeeded();
@@ -10,8 +9,7 @@ const ensureDb = async () => {
 };
 
 export default async function handler(req: any, res: any) {
-  // Add CORS headers
-  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
@@ -24,21 +22,24 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
   try {
     await ensureDb();
+    const { action, operations } = req.body;
     
-    const { action, operations } = req.body || {};
     let opsToRun = [];
     if (action === 'batch' && Array.isArray(operations)) {
       opsToRun = operations;
-    } else if (req.body && Object.keys(req.body).length > 0) {
+    } else {
       opsToRun = [req.body];
     }
-    
     const newData = await mutateDatabase(opsToRun);
     res.status(200).json({ success: true, data: newData });
   } catch (e: any) {
-    console.log("Error processing POST:", e.message);
-    res.status(500).json({ error: 'Failed to process POST', message: e.message });
+    res.status(500).json({ error: 'Failed to mutate database', message: e.message });
   }
 }

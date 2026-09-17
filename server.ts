@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { getDatabase, mutateDatabase, initializeDatabaseIfNeeded } from './api/webdav';
+import { getDatabase, mutateDatabase, initializeDatabaseIfNeeded } from './server-utils/webdav';
 
 dotenv.config();
 

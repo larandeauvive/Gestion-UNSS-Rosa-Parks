@@ -1,7 +1,6 @@
-import { mutateDatabase, initializeDatabaseIfNeeded } from '../webdav';
+import { mutateDatabase, initializeDatabaseIfNeeded } from '../../server-utils/webdav';
 
 let dbInitialized = false;
-
 const ensureDb = async () => {
     if (!dbInitialized) {
         await initializeDatabaseIfNeeded();
@@ -10,8 +9,7 @@ const ensureDb = async () => {
 };
 
 export default async function handler(req: any, res: any) {
-  // Add CORS headers
-  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
@@ -24,18 +22,19 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
   try {
     await ensureDb();
-    
-    if (!req.body || !req.body.data) {
-      return res.status(400).json({ error: 'No data provided' });
-    }
-    
     const { data } = req.body;
+    if (!data) return res.status(400).json({ error: 'No data provided' });
+    
     const newData = await mutateDatabase([{ action: 'overwrite', payload: data }]);
     res.status(200).json({ success: true, data: newData });
   } catch (e: any) {
-    console.log("Error restoring db:", e.message);
     res.status(500).json({ error: 'Failed to restore database', message: e.message });
   }
 }
