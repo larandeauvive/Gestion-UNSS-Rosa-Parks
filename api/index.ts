@@ -14,7 +14,7 @@ const ensureDb = async () => {
     }
 };
 
-app.get('/api/db', async (req, res) => {
+app.get('*', async (req, res) => {
   try {
     await ensureDb();
     const data = await getDatabase();
@@ -24,34 +24,30 @@ app.get('/api/db', async (req, res) => {
   }
 });
 
-app.post('/api/db/mutate', async (req, res) => {
+app.post('*', async (req, res) => {
   try {
     await ensureDb();
-    const { action, operations } = req.body;
+    
+    // Check if it's a restore request (has 'data' property, no 'operations')
+    if (req.body && req.body.data && !req.body.operations && req.body.action !== 'batch') {
+      const { data } = req.body;
+      const newData = await mutateDatabase([{ action: 'overwrite', payload: data }]);
+      return res.json({ success: true, data: newData });
+    }
+    
+    // Otherwise it's a mutate request
+    const { action, operations } = req.body || {};
     let opsToRun = [];
     if (action === 'batch' && Array.isArray(operations)) {
       opsToRun = operations;
-    } else {
+    } else if (req.body && Object.keys(req.body).length > 0) {
       opsToRun = [req.body];
     }
     const newData = await mutateDatabase(opsToRun);
     res.json({ success: true, data: newData });
   } catch (e: any) {
-    console.log("Error mutating db:", e.message);
-    res.status(500).json({ error: 'Failed to mutate database', message: e.message });
-  }
-});
-
-app.post('/api/db/restore', async (req, res) => {
-  try {
-    await ensureDb();
-    const { data } = req.body;
-    if (!data) return res.status(400).json({ error: 'No data provided' });
-    const newData = await mutateDatabase([{ action: 'overwrite', payload: data }]);
-    res.json({ success: true, data: newData });
-  } catch (e: any) {
-    console.log("Error restoring db:", e.message);
-    res.status(500).json({ error: 'Failed to restore database', message: e.message });
+    console.log("Error processing POST:", e.message);
+    res.status(500).json({ error: 'Failed to process POST', message: e.message });
   }
 });
 
