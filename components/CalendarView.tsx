@@ -7,7 +7,10 @@ import {
   startOfWeek, endOfWeek, isSameMonth, isSameDay, eachDayOfInterval 
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, X, Printer, Users, FileText, Calendar as CalendarIcon, PlusCircle, Loader2, Share2, Trash2, Edit3 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Printer, Users, FileText, Calendar as CalendarIcon, PlusCircle, Loader2, Share2, Trash2, Edit3, Download, FileUp } from 'lucide-react';
+import { RegistrationFormDoc } from '../types';
+import { RegistrationFormModal } from './RegistrationFormModal';
+import { downloadRegistrationForm, formatFileSize } from '../lib/registrationFormHelper';
 
 interface Props {
   students: Student[];
@@ -28,6 +31,10 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Formulaire d'inscription téléchargeable
+  const [registrationForm, setRegistrationForm] = useState<RegistrationFormDoc | null>(null);
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
@@ -131,6 +138,21 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
       unsubSession();
     };
   }, [activeYear]);
+
+  // Écoute en temps réel du formulaire d'inscription officiel
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'registrationForm'), (docSnap) => {
+      if (docSnap.exists()) {
+        setRegistrationForm(docSnap.data() as RegistrationFormDoc);
+      } else {
+        setRegistrationForm(null);
+      }
+    }, (err) => {
+      console.warn("Erreur chargement formulaire inscription:", err);
+    });
+
+    return () => unsub();
+  }, []);
 
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
@@ -421,22 +443,53 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
               {format(currentMonth, 'MMMM yyyy', { locale: fr })}
             </h2>
             <p className="text-sm font-semibold text-slate-500 mt-0.5">
-              Gérez les séances et convocations
+              {isPublic 
+                ? "Séances d'entraînement & compétitions UNSS — AS Lycée Rosa Parks" 
+                : "Gérez les séances et convocations"}
             </p>
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           {!isPublic && (
-            <button 
-              onClick={handleShare}
-              className="hidden sm:flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl font-bold transition-all shadow-sm"
-              title="Partager le calendrier en lecture seule"
+            <>
+              <button 
+                type="button"
+                onClick={() => setIsFormModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-xl font-bold transition-all shadow-xs text-sm"
+                title="Téléverser ou modifier la fiche d'inscription téléchargeable sur le calendrier public"
+              >
+                <FileUp className="w-4 h-4 text-indigo-600" />
+                <span className="hidden sm:inline">Formulaire d'inscription</span>
+                <span className="sm:hidden">Formulaire</span>
+                {registrationForm && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" title="Formulaire officiel actif"></span>
+                )}
+              </button>
+
+              <button 
+                onClick={handleShare}
+                className="hidden sm:flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl font-bold transition-all shadow-sm"
+                title="Partager le calendrier en lecture seule"
+              >
+                <Share2 className="w-4 h-4" />
+                <span className="text-sm">Partager</span>
+              </button>
+            </>
+          )}
+
+          {isPublic && (
+            <button
+              type="button"
+              onClick={() => downloadRegistrationForm(registrationForm)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold transition-all shadow-sm text-sm"
+              title="Télécharger le formulaire d'inscription"
             >
-              <Share2 className="w-4 h-4" />
-              <span className="text-sm">Partager</span>
+              <Download className="w-4 h-4" />
+              <span>Télécharger le formulaire</span>
             </button>
           )}
+
           <div className="flex items-center bg-slate-100/80 p-1 rounded-xl border border-slate-200/60">
             <button onClick={prevMonth} className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-600">
               <ChevronLeft className="w-5 h-5" />
@@ -447,6 +500,92 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           </div>
         </div>
       </div>
+
+      {/* Bannière de téléchargement du formulaire sur le calendrier partagé */}
+      {isPublic && (
+        <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 rounded-2xl p-5 sm:p-6 text-white border border-indigo-800/60 shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-5 animate-in fade-in duration-200">
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 flex items-center justify-center shrink-0 shadow-inner">
+              <FileText className="w-6 h-6 text-indigo-200" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider bg-indigo-500/30 text-indigo-200 px-2.5 py-0.5 rounded-full border border-indigo-400/30">
+                  Adhésion & Licence UNSS
+                </span>
+                <span className="text-[11px] text-slate-300">
+                  {registrationForm?.fileName ? (
+                    <span className="text-emerald-400 font-medium">● Formulaire officiel disponible</span>
+                  ) : (
+                    <span>● Fiche d'adhésion officielle AS Rosa Parks</span>
+                  )}
+                </span>
+              </div>
+              <h3 className="text-lg font-black text-white mt-1 leading-snug tracking-tight">
+                Formulaire d'inscription & adhésion à l'AS
+              </h3>
+              <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                Téléchargez la fiche d'inscription officielle pour participer aux entraînements et compétitions du mercredi. Document à compléter et remettre aux professeurs d'EPS.
+              </p>
+            </div>
+          </div>
+
+          <div className="shrink-0 w-full md:w-auto">
+            <button
+              type="button"
+              onClick={() => downloadRegistrationForm(registrationForm)}
+              className="w-full md:w-auto flex items-center justify-center gap-2.5 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-black rounded-xl text-sm transition-all shadow-lg shadow-emerald-950/40 cursor-pointer"
+            >
+              <Download className="w-4 h-4 stroke-[2.5]" />
+              <span>
+                {registrationForm?.fileName 
+                  ? `Télécharger la fiche (${formatFileSize(registrationForm.fileSize)})` 
+                  : "Télécharger le formulaire d'inscription (PDF)"}
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* En mode Enseignant/Admin : Récapitulatif du document en ligne */}
+      {!isPublic && (
+        <div className="bg-white px-5 py-3.5 rounded-xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+              <FileText className="w-4 h-4" />
+            </div>
+            <div className="truncate">
+              <span className="font-bold text-slate-800">Formulaire d'inscription sur le calendrier partagé : </span>
+              {registrationForm ? (
+                <span className="text-slate-600">
+                  <strong className="text-slate-900">{registrationForm.fileName}</strong> ({formatFileSize(registrationForm.fileSize)}) — Mis en ligne le {new Date(registrationForm.updatedAt).toLocaleDateString('fr-FR')}
+                </span>
+              ) : (
+                <span className="text-amber-700">Aucun fichier personnalisé téléversé (modèle standard proposé par défaut).</span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => downloadRegistrationForm(registrationForm)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-slate-700 hover:text-slate-950 bg-slate-100 hover:bg-slate-200/80 rounded-lg font-semibold transition-colors"
+              title="Tester le téléchargement du formulaire actuel"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Tester le téléchargement</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsFormModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors shadow-xs"
+            >
+              <FileUp className="w-3.5 h-3.5" />
+              <span>{registrationForm ? "Remplacer le fichier" : "Charger le fichier"}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Calendar Grid */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-md shadow-slate-200/50 overflow-hidden mb-6">
@@ -974,6 +1113,13 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           </div>
         </div>
       )}
+      {/* Modal de gestion du formulaire d'inscription pour les enseignants */}
+      <RegistrationFormModal
+        isOpen={isFormModalOpen}
+        onClose={() => setIsFormModalOpen(false)}
+        currentForm={registrationForm}
+        onFormUpdated={(newDoc) => setRegistrationForm(newDoc)}
+      />
     </div>
   );
 };

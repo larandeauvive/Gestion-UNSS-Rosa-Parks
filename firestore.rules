@@ -70,10 +70,9 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
-    // 6. PARAMÈTRES DE L'AS
+    // 6. PARAMÈTRES DE L'AS (inclut la fiche d'inscription téléchargeable)
     match /settings/{settingId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
 
     // 7. ENSEIGNANTS

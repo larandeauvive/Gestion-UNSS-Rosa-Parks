@@ -91,3 +91,13 @@ export interface ColumnDefinition {
   label: string;
   visible: boolean;
 }
+
+export interface RegistrationFormDoc {
+  fileName: string;
+  fileType: string;
+  fileSize: number; // Taille en octets
+  fileData: string; // Base64 Data URL (data:application/pdf;base64,...)
+  updatedAt: string; // Date ISO de mise à jour
+  updatedBy?: string;
+  instructions?: string;
+}
