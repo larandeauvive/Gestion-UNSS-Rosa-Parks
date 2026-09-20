@@ -1,8 +1,6 @@
-import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs, writeBatch, setDoc, orderBy } from '../lib/firestore-mock';
+import { collection, doc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import React, { useState } from 'react';
-import { useDatabase } from '../hooks/useDatabase';
-
 import { Download, Upload, AlertTriangle, Loader2 } from 'lucide-react';
 
 interface BackupManagerProps {

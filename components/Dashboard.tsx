@@ -1,8 +1,6 @@
-import { collection, query, where, onSnapshot } from '../lib/firestore-mock';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import React, { useState, useEffect } from 'react';
-
-import { useDatabase } from '../hooks/useDatabase';
 import { Convocation, Session, Student } from '../types';
 import { Activity, Users, Trophy, TrendingUp, Percent, UserCheck, PieChart, Settings } from 'lucide-react';
 

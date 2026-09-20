@@ -1,10 +1,8 @@
-import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs, writeBatch, setDoc, orderBy } from '../lib/firestore-mock';
+import { updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import React, { useState, useEffect } from 'react';
 import { Student } from '../types';
 import { X, Save, FileEdit, Trash2 } from 'lucide-react';
-
-import { useDatabase } from '../hooks/useDatabase';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface EditStudentModalProps {

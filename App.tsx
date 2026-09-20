@@ -1,9 +1,8 @@
-import { useDatabase } from "./hooks/useDatabase";
-
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-
+import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from './lib/firebase';
 import { Student, ColumnDefinition } from './types';
-import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut, KeyRound, AlertTriangle } from 'lucide-react';
+import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut, KeyRound } from 'lucide-react';
 import { StatCard } from './components/StatCard';
 import { Modal } from './components/Modal';
 import { BackupManager } from './components/BackupManager';
@@ -22,7 +21,6 @@ import { CalendarView } from './components/CalendarView';
 import { importFromCSV } from './lib/importCsv';
 import { deleteMultipleStudents, updateMultipleStudents, addStudent } from './lib/db';
 import { TeacherPortal } from './components/TeacherPortal';
-import { NuageBadge } from './components/NuageBadge';
 
 const INITIAL_COLUMNS: ColumnDefinition[] = [
   { key: 'lastName', label: 'Nom', visible: true },
@@ -45,7 +43,7 @@ const INITIAL_COLUMNS: ColumnDefinition[] = [
 ];
 
 export default function App() {
-  
+  const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Public Route state
@@ -66,11 +64,25 @@ export default function App() {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
 
+  // Load Settings from Firestore
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'settings', 'general'));
+        if (snap.exists() && snap.data()?.teacherPassword) {
+          setTeacherPassword(snap.data()!.teacherPassword);
+        }
+      } catch (e) {
+        console.error("Failed to load settings:", e);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   const handleUpdatePassword = async () => {
     if (!newPassword.trim()) return;
     try {
-      
+      await setDoc(doc(db, 'settings', 'general'), { teacherPassword: newPassword.trim() }, { merge: true });
       setTeacherPassword(newPassword.trim());
       setIsPasswordModalOpen(false);
       setNewPassword('');
@@ -95,10 +107,6 @@ export default function App() {
   
   // View State
   const [activeYear, setActiveYear] = useState<string>('2025-2026');
-  
-  const addStudent = async (student) => mutate({ collection: 'students', action: 'add', payload: student });
-  const updateMultipleStudents = async (ids, payload) => mutate({ action: 'batch', operations: ids.map(id => ({ collection: 'students', action: 'update', id, payload })) });
-  const deleteMultipleStudents = async (ids) => mutate({ action: 'batch', operations: ids.map(id => ({ collection: 'students', action: 'delete', id })) });
   
   const [currentTab, setCurrentTab] = useState<'eleves'|'convocations'|'dashboard'|'seances'|'calendrier'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
@@ -136,20 +144,34 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  
-  const { students, loading: dbLoading, error: dbError, mutate } = useDatabase();
-
+  // Real-time Firestore sync for students
   useEffect(() => {
-    if (!isAuthenticated) return;
-    setLoading(dbLoading);
-    const sorted = [...students].sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
-    if (sorted.length > 0) {
-      const years = Array.from(new Set(sorted.map(s => s.schoolYear).filter(Boolean))).sort().reverse();
-      if (years.length > 0 && !years.includes(activeYear)) {
-        setActiveYear(years[0]);
-      }
+    if (!isAuthenticated && !isPublicCalendar && !isPublicTeacher) {
+      setLoading(false);
+      return;
     }
-  }, [students, isAuthenticated, dbLoading, activeYear]);
+    setLoading(true);
+    const q = query(collection(db, 'students'), orderBy('lastName', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data: Student[] = [];
+      snapshot.forEach((doc) => {
+        data.push({ id: doc.id, ...doc.data() } as Student);
+      });
+      setStudents(data);
+      if (data.length > 0) {
+        const years = Array.from(new Set(data.map(s => s.schoolYear).filter(Boolean))).sort().reverse();
+        if (years.length > 0 && !years.includes(activeYear)) {
+          setActiveYear(years[0]);
+        }
+      }
+      setLoading(false);
+    }, (err) => {
+      console.error("Firestore error:", err);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [isAuthenticated, isPublicCalendar, isPublicTeacher]);
   
 
   // Filter Logic
@@ -218,9 +240,6 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-50 p-6">
         <div className="max-w-7xl mx-auto space-y-4">
-          <div className="flex justify-end">
-            <NuageBadge />
-          </div>
           <CalendarView 
             students={students.filter(s => s.schoolYear === activeYear)}
             activeYear={activeYear}
@@ -243,9 +262,6 @@ export default function App() {
     }
     return (
       <div className="min-h-screen bg-slate-50">
-        <div className="p-4 flex justify-end max-w-7xl mx-auto">
-          <NuageBadge />
-        </div>
         <TeacherPortal 
           students={students.filter(s => s.schoolYear === activeYear)}
           activeYear={activeYear}
@@ -363,14 +379,10 @@ export default function App() {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <h1 className="text-4xl font-extrabold tracking-tight">AS Rosa Parks</h1>
-              <div className="flex items-center gap-3 mt-2">
-                <p className="text-slate-400 font-medium">Plateforme de Gestion des Licenciés</p>
-                <NuageBadge variant="dark" className="hidden sm:flex" />
-              </div>
+              <p className="text-slate-400 font-medium mt-2">Plateforme de Gestion des Licenciés</p>
             </div>
             
             <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4">
-              <NuageBadge variant="dark" className="sm:hidden" />
               <div className="text-right sm:mr-2">
                 <div className="text-sm font-medium text-white">Administrateur</div>
               </div>
@@ -511,16 +523,6 @@ export default function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 -mt-10 space-y-6">
-        
-        {dbError && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-4 rounded-xl flex items-start gap-3 shadow-sm mb-6">
-            <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0 text-red-600" />
-            <div>
-              <h3 className="font-semibold text-red-900">Problème de connexion avec Nuage / Nextcloud</h3>
-              <p className="text-sm mt-1">{dbError}</p>
-            </div>
-          </div>
-        )}
 
         {currentTab === 'eleves' && (
           <>

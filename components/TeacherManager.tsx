@@ -1,8 +1,6 @@
-import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs, writeBatch, setDoc, orderBy } from '../lib/firestore-mock';
+import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import React, { useState, useEffect } from 'react';
-
-import { useDatabase } from '../hooks/useDatabase';
 import { Teacher } from '../types';
 import { Loader2, Plus, Edit2, Trash2 } from 'lucide-react';
 

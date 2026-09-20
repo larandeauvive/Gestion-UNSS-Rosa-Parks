@@ -1,4 +1,4 @@
-import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs, writeBatch, setDoc, orderBy } from '../lib/firestore-mock';
+import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Student, Session } from '../types';

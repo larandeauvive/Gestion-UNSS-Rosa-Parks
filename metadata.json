@@ -2,5 +2,5 @@
   "name": "AS Rosa Parks Manager",
   "description": "Application de gestion des licenciés pour l'AS Rosa Parks, permettant le filtrage, la sélection et l'exportation des données élèves.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

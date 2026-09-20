@@ -1,8 +1,6 @@
-import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs, writeBatch, setDoc, orderBy } from '../lib/firestore-mock';
+import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import React, { useState, useEffect } from 'react';
-
-import { useDatabase } from '../hooks/useDatabase';
 import { Convocation, Session, Student } from '../types';
 import { 
   format, addMonths, subMonths, startOfMonth, endOfMonth, 

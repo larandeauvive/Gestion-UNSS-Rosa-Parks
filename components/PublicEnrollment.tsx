@@ -1,11 +1,8 @@
-import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs, writeBatch, setDoc, orderBy } from '../lib/firestore-mock';
+import { collection, query, updateDoc, doc, where, getDoc, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import React, { useState, useEffect, useMemo } from 'react';
-
-import { useDatabase } from '../hooks/useDatabase';
 import { Student, Session } from '../types';
 import { CheckCircle2, Search, AlertTriangle, ShieldCheck, Users } from 'lucide-react';
-import { NuageBadge } from './NuageBadge';
 
 interface PublicEnrollmentProps {
   sessionId: string;
@@ -111,9 +108,6 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex flex-col justify-center items-center pt-8">
-      <div className="mb-6 w-full max-w-lg flex justify-end">
-        <NuageBadge />
-      </div>
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="bg-indigo-600 p-6 text-white text-center">
           <h1 className="text-2xl font-bold mb-2">Inscription</h1>

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
 import { Modal } from './Modal';
-import { useDatabase } from '../hooks/useDatabase';
+import { collection, getDocs, writeBatch } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface ResetModalProps {
   isOpen: boolean;
@@ -9,7 +10,6 @@ interface ResetModalProps {
 }
 
 export function ResetModal({ isOpen, onClose }: ResetModalProps) {
-  const { mutate } = useDatabase();
   const [step, setStep] = useState(1);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -24,28 +24,33 @@ export function ResetModal({ isOpen, onClose }: ResetModalProps) {
     setStep(2);
   };
 
+  const deleteCollectionDocs = async (colName: string) => {
+    const snap = await getDocs(collection(db, colName));
+    let batch = writeBatch(db);
+    let count = 0;
+    for (const d of snap.docs) {
+      batch.delete(d.ref);
+      count++;
+      if (count % 450 === 0) {
+        await batch.commit();
+        batch = writeBatch(db);
+      }
+    }
+    if (count % 450 !== 0) {
+      await batch.commit();
+    }
+  };
+
   const handleConfirm = async () => {
     try {
       if (resetType === 'calendar') {
-        // We delete all sessions and convocations
-        await mutate({
-          action: 'batch',
-          operations: [
-            { collection: 'sessions', action: 'overwrite', payload: [] },
-            { collection: 'convocations', action: 'overwrite', payload: [] }
-          ]
-        });
+        await deleteCollectionDocs('sessions');
+        await deleteCollectionDocs('convocations');
       } else {
-        // Delete everything
-        await mutate({
-          action: 'batch',
-          operations: [
-            { collection: 'sessions', action: 'overwrite', payload: [] },
-            { collection: 'convocations', action: 'overwrite', payload: [] },
-            { collection: 'students', action: 'overwrite', payload: [] },
-            { collection: 'teachers', action: 'overwrite', payload: [] }
-          ]
-        });
+        await deleteCollectionDocs('sessions');
+        await deleteCollectionDocs('convocations');
+        await deleteCollectionDocs('students');
+        await deleteCollectionDocs('teachers');
       }
       onClose();
       // Reset state on close
