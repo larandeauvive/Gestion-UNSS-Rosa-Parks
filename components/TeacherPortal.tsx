@@ -5,15 +5,16 @@ import { CalendarView } from './CalendarView';
 import { StudentTable } from './StudentTable';
 import { ConvocationManager } from './ConvocationManager';
 import { TeacherManager } from './TeacherManager';
-import { CalendarDays, Users, Search, Activity, Printer, ClipboardList, GraduationCap } from 'lucide-react';
+import { CalendarDays, Users, Search, Activity, Printer, ClipboardList, GraduationCap, LogOut } from 'lucide-react';
 import { formatDateFr } from '../lib/utils';
 
 interface Props {
   students: Student[];
   activeYear: string;
+  onLogout?: () => void;
 }
 
-export const TeacherPortal: React.FC<Props> = ({ students, activeYear }) => {
+export const TeacherPortal: React.FC<Props> = ({ students, activeYear, onLogout }) => {
   const [currentTab, setCurrentTab] = useState<'seances' | 'calendrier' | 'licences' | 'convocations' | 'enseignants'>('seances');
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
@@ -127,6 +128,16 @@ export const TeacherPortal: React.FC<Props> = ({ students, activeYear }) => {
               <h1 className="text-4xl font-extrabold tracking-tight">Espace Enseignant</h1>
               <p className="text-indigo-200 mt-2 font-medium">AS Rosa Parks - {activeYear}</p>
             </div>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-2 px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-medium transition-colors backdrop-blur-sm border border-white/10"
+                title="Quitter l'Espace Enseignant"
+              >
+                <LogOut className="w-4 h-4 text-indigo-200" />
+                Déconnexion
+              </button>
+            )}
           </div>
         </div>
       </header>

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { Student, ColumnDefinition } from './types';
-import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut, KeyRound } from 'lucide-react';
+import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut, KeyRound, ShieldAlert, RefreshCw, Copy, Check } from 'lucide-react';
 import { StatCard } from './components/StatCard';
 import { Modal } from './components/Modal';
 import { BackupManager } from './components/BackupManager';
@@ -50,6 +50,9 @@ export default function App() {
   const [enrollSessionId, setEnrollSessionId] = useState<string | null>(null);
   const [isPublicCalendar, setIsPublicCalendar] = useState(false);
   const [isPublicTeacher, setIsPublicTeacher] = useState(false);
+  const [isOldOrInvalidTeacherLink, setIsOldOrInvalidTeacherLink] = useState(false);
+  const [teacherToken, setTeacherToken] = useState<string>('prof-2026-asrp');
+  const [isCopiedTeacherLink, setIsCopiedTeacherLink] = useState(false);
 
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -64,13 +67,76 @@ export default function App() {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
 
-  // Load Settings from Firestore
+  // Generate a random teacher token helper
+  const generateNewToken = () => {
+    return 'prof-' + Math.random().toString(36).substring(2, 8) + '-' + Date.now().toString(36).slice(-4);
+  };
+
+  // Load Settings from Firestore and evaluate public parameters
   useEffect(() => {
     const fetchSettings = async () => {
       try {
         const snap = await getDoc(doc(db, 'settings', 'general'));
-        if (snap.exists() && snap.data()?.teacherPassword) {
-          setTeacherPassword(snap.data()!.teacherPassword);
+        let currentToken = '';
+        let currentPwd = 'ASRP2026';
+
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data?.teacherPassword) {
+            currentPwd = data.teacherPassword;
+            setTeacherPassword(data.teacherPassword);
+          }
+          if (data?.teacherToken) {
+            currentToken = data.teacherToken;
+            setTeacherToken(data.teacherToken);
+          } else {
+            // First time migration: create a new unique token in Firestore
+            currentToken = generateNewToken();
+            await setDoc(doc(db, 'settings', 'general'), { teacherToken: currentToken }, { merge: true });
+            setTeacherToken(currentToken);
+          }
+        } else {
+          // Initialize settings doc
+          currentToken = generateNewToken();
+          await setDoc(doc(db, 'settings', 'general'), { teacherPassword: currentPwd, teacherToken: currentToken }, { merge: true });
+          setTeacherToken(currentToken);
+        }
+
+        // Check URL parameters against active token
+        const params = new URLSearchParams(window.location.search);
+        const session = params.get('enroll');
+        if (session) {
+          setEnrollSessionId(session);
+        }
+        if (params.get('public') === 'calendar') {
+          setIsPublicCalendar(true);
+        }
+
+        // Check teacher link
+        const isOldTeacherParam = params.get('public') === 'teacher';
+        const newTeacherToken = params.get('enseignant') || (params.get('public') === 'enseignant' ? params.get('token') : null);
+
+        if (isOldTeacherParam) {
+          // The old link `?public=teacher` is now explicitly obsolete
+          setIsOldOrInvalidTeacherLink(true);
+          setIsPublicTeacher(false);
+          localStorage.removeItem('teacher_auth');
+          localStorage.removeItem('teacher_token');
+          setTeacherAuth(false);
+        } else if (newTeacherToken) {
+          if (newTeacherToken === currentToken) {
+            setIsPublicTeacher(true);
+            setIsOldOrInvalidTeacherLink(false);
+            // Verify session token
+            if (localStorage.getItem('teacher_token') !== currentToken) {
+              localStorage.removeItem('teacher_auth');
+              setTeacherAuth(false);
+            }
+          } else {
+            // Provided token doesn't match active token (revoked / obsolete)
+            setIsOldOrInvalidTeacherLink(true);
+            setIsPublicTeacher(false);
+          }
         }
       } catch (e) {
         console.error("Failed to load settings:", e);
@@ -86,24 +152,35 @@ export default function App() {
       setTeacherPassword(newPassword.trim());
       setIsPasswordModalOpen(false);
       setNewPassword('');
+      alert("Le mot de passe enseignant a été mis à jour avec succès.");
     } catch (e) {
       alert("Erreur lors de la mise à jour du mot de passe.");
     }
   };
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const session = params.get('enroll');
-    if (session) {
-      setEnrollSessionId(session);
+  const handleRegenerateTeacherToken = async () => {
+    const confirmRegen = window.confirm(
+      "Attention : Voulez-vous vraiment générer un nouveau lien d'accès enseignant ?\n\nLe lien actuel deviendra immédiatement OBSOLÈTE et l'ensemble des enseignants devra utiliser la nouvelle adresse."
+    );
+    if (!confirmRegen) return;
+
+    const newToken = generateNewToken();
+    try {
+      await setDoc(doc(db, 'settings', 'general'), { teacherToken: newToken }, { merge: true });
+      setTeacherToken(newToken);
+      localStorage.removeItem('teacher_auth');
+      localStorage.removeItem('teacher_token');
+      alert("Nouveau lien enseignant généré ! L'ancien lien est désormais obsolète.");
+    } catch (e) {
+      alert("Erreur lors de la génération du nouveau lien.");
     }
-    if (params.get('public') === 'calendar') {
-      setIsPublicCalendar(true);
-    }
-    if (params.get('public') === 'teacher') {
-      setIsPublicTeacher(true);
-    }
-  }, []);
+  };
+
+  const getTeacherAccessUrl = () => {
+    const url = new URL(window.location.origin + window.location.pathname);
+    url.searchParams.set('enseignant', teacherToken);
+    return url.toString();
+  };
   
   // View State
   const [activeYear, setActiveYear] = useState<string>('2025-2026');
@@ -250,12 +327,46 @@ export default function App() {
     );
   }
 
+  if (isOldOrInvalidTeacherLink) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 text-center animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-amber-600 p-8 flex flex-col items-center text-white">
+            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-3">
+              <ShieldAlert className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold">Lien enseignant obsolète</h1>
+            <p className="text-amber-100 text-sm mt-1">Accès sécurisé AS Rosa Parks</p>
+          </div>
+          <div className="p-8 space-y-4">
+            <p className="text-slate-600 text-sm leading-relaxed">
+              Ce lien d'accès à l'Espace Enseignant n'est plus actif. L'administrateur a remplacé ou régénéré le lien d'accès pour des raisons de sécurité.
+            </p>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 font-medium text-left flex items-start gap-2.5">
+              <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>Veuillez vous rapprocher du professeur référent ou de l'administrateur de l'AS pour obtenir le lien d'accès mis à jour.</span>
+            </div>
+            <button
+              onClick={() => {
+                window.location.href = window.location.pathname;
+              }}
+              className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-medium rounded-xl transition-colors text-sm shadow-sm mt-2"
+            >
+              Retour à l'accueil
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (isPublicTeacher) {
     if (!teacherAuth && !isAdmin) {
       return <TeacherLoginScreen 
         correctPassword={teacherPassword}
         onLogin={() => {
           localStorage.setItem('teacher_auth', 'true');
+          localStorage.setItem('teacher_token', teacherToken);
           setTeacherAuth(true);
         }} 
       />;
@@ -265,6 +376,11 @@ export default function App() {
         <TeacherPortal 
           students={students.filter(s => s.schoolYear === activeYear)}
           activeYear={activeYear}
+          onLogout={() => {
+            localStorage.removeItem('teacher_auth');
+            localStorage.removeItem('teacher_token');
+            setTeacherAuth(false);
+          }}
         />
       </div>
     );
@@ -427,15 +543,23 @@ export default function App() {
                   <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-200">
                     <button 
                       onClick={() => {
-                        const url = new URL(window.location.href);
-                        url.searchParams.set('public', 'teacher');
-                        navigator.clipboard.writeText(url.toString());
-                        alert("Le lien de l'espace enseignant a été copié dans le presse-papiers.");
+                        const url = getTeacherAccessUrl();
+                        navigator.clipboard.writeText(url);
+                        setIsCopiedTeacherLink(true);
+                        setTimeout(() => setIsCopiedTeacherLink(false), 2500);
+                        alert("Le nouveau lien de l'Espace Enseignant a été copié dans le presse-papiers :\n\n" + url);
                       }}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded-lg transition-colors text-left mb-1"
+                      className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded-lg transition-colors text-left mb-1"
                     >
-                      <Users className="w-4 h-4 text-indigo-500" />
-                      Lien Espace Enseignant
+                      <div className="flex items-center gap-3">
+                        <Users className="w-4 h-4 text-indigo-500" />
+                        <span>Lien Espace Enseignant</span>
+                      </div>
+                      {isCopiedTeacherLink ? (
+                        <Check className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5 text-slate-400" />
+                      )}
                     </button>
                     <button 
                       onClick={() => {
@@ -446,7 +570,7 @@ export default function App() {
                       className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded-lg transition-colors text-left border-b border-slate-100 pb-3 mb-2"
                     >
                       <KeyRound className="w-4 h-4 text-slate-500" />
-                      Mot de passe enseignant
+                      Accès & Sécurité Enseignant
                     </button>
                     <button 
                       onClick={() => {
@@ -741,37 +865,100 @@ export default function App() {
 
       {isPasswordModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">Modifier le mot de passe enseignant</h2>
-            <div className="space-y-4">
-              <p className="text-sm text-slate-500">
-                Ce mot de passe permet de protéger l'accès à l'Espace Enseignant. Partagez-le avec vos collègues avec le lien.
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 animate-in fade-in zoom-in-95 duration-200 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 bg-indigo-50 text-indigo-700 rounded-xl flex items-center justify-center">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Accès & Sécurité Enseignant</h2>
+                  <p className="text-xs text-slate-500">Gestion du lien d'accès et du mot de passe</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsPasswordModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Section 1: Lien d'accès */}
+            <div className="space-y-3 bg-slate-50 border border-slate-200/80 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-700">Lien d'accès Enseignant actuel</label>
+                <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Actif</span>
+              </div>
+              
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  readOnly
+                  value={getTeacherAccessUrl()}
+                  className="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-lg text-slate-700 select-all focus:outline-none"
+                />
+                <button
+                  onClick={() => {
+                    const url = getTeacherAccessUrl();
+                    navigator.clipboard.writeText(url);
+                    setIsCopiedTeacherLink(true);
+                    setTimeout(() => setIsCopiedTeacherLink(false), 2500);
+                  }}
+                  className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shrink-0 transition-colors shadow-sm"
+                  title="Copier le lien"
+                >
+                  {isCopiedTeacherLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{isCopiedTeacherLink ? "Copié !" : "Copier"}</span>
+                </button>
+              </div>
+
+              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-3">
+                <p className="text-[11px] text-slate-500 leading-tight">
+                  Pour rendre le lien précédent obsolète et en créer un nouveau :
+                </p>
+                <button
+                  type="button"
+                  onClick={handleRegenerateTeacherToken}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors shrink-0"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Régénérer le lien
+                </button>
+              </div>
+            </div>
+
+            {/* Section 2: Mot de passe */}
+            <div className="space-y-3">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">Mot de passe de l'Espace Enseignant</label>
+              <p className="text-xs text-slate-500">
+                Protège l'accès une fois le lien ouvert. Modifiez-le ci-dessous si nécessaire.
               </p>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Nouveau mot de passe</label>
+              <div className="flex gap-2">
                 <input 
                   type="text" 
                   value={newPassword}
                   onChange={e => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-medium"
                   placeholder="Ex: ASRP2026"
                 />
-              </div>
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-                <button 
-                  onClick={() => setIsPasswordModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors"
-                >
-                  Annuler
-                </button>
                 <button 
                   onClick={handleUpdatePassword}
                   disabled={!newPassword.trim()}
-                  className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50 shrink-0"
                 >
                   Enregistrer
                 </button>
               </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button 
+                onClick={() => setIsPasswordModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                Fermer
+              </button>
             </div>
           </div>
         </div>
