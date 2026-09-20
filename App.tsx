@@ -21,6 +21,7 @@ import { CalendarView } from './components/CalendarView';
 import { importFromCSV } from './lib/importCsv';
 import { deleteMultipleStudents, updateMultipleStudents, addStudent } from './lib/db';
 import { TeacherPortal } from './components/TeacherPortal';
+import { Footer } from './components/Footer';
 
 const INITIAL_COLUMNS: ColumnDefinition[] = [
   { key: 'lastName', label: 'Nom', visible: true },
@@ -315,14 +316,15 @@ export default function App() {
   
   if (isPublicCalendar) {
     return (
-      <div className="min-h-screen bg-slate-50 p-6">
-        <div className="max-w-7xl mx-auto space-y-4">
+      <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
+        <div className="max-w-7xl mx-auto w-full p-6 space-y-4">
           <CalendarView 
             students={students.filter(s => s.schoolYear === activeYear)}
             activeYear={activeYear}
             isPublic={true}
           />
         </div>
+        <Footer />
       </div>
     );
   }
@@ -816,6 +818,8 @@ export default function App() {
           />
         )}
       </main>
+
+      <Footer />
 
       {/* Modals */}
       <EditStudentModal

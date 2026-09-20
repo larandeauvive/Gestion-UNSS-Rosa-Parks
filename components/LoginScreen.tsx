@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lock } from 'lucide-react';
+import { Footer } from './Footer';
 
 interface LoginScreenProps {
   onLogin: () => void;
@@ -66,6 +67,9 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             </button>
           </form>
         </div>
+      </div>
+      <div className="w-full max-w-5xl mt-12">
+        <Footer />
       </div>
     </div>
   );

@@ -1,8 +1,91 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Fonctions d'aide
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Validation stricte du formulaire de contact (RGPD & anti-injection)
+    function isValidContactMessage(data) {
+      return data.keys().hasAll(['fullName', 'email', 'message', 'createdAt'])
+        && data.keys().hasOnly(['fullName', 'email', 'phone', 'studentClass', 'message', 'createdAt', 'status'])
+        && data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 150
+        && data.email.matches('^[^@]+@[^@]+\\.[a-zA-Z]{2,}$')
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 20))
+        && (!('studentClass' in data) || (data.studentClass is string && data.studentClass.size() <= 30))
+        && data.message is string && data.message.size() >= 5 && data.message.size() <= 2000
+        && data.createdAt == request.time
+        && (!('status' in data) || data.status == 'new');
+    }
+
+    // 1. FORMULAIRE DE CONTACT / INSCRIPTION (Écriture à l'aveugle, lecture publique bloquée)
+    // Permet aux familles et élèves d'envoyer un message sans pouvoir lire les messages des autres
+    match /contact_messages/{messageId} {
+      // Création publique autorisée sous réserve de respecter le schéma strict
+      allow create: if isValidContactMessage(incoming());
+
+      // LECTURE PUBLIQUE STRICTEMENT BLOQUÉE : seuls les enseignants connectés ont accès
+      allow read: if isSignedIn();
+
+      // Modification et suppression réservées aux gestionnaires
+      allow update, delete: if isSignedIn();
+    }
+
+    // 2. FORMULAIRE D'INSCRIPTION RAPIDE (si utilisé)
+    match /public_inscriptions/{inscriptionId} {
+      allow create: if incoming().keys().hasAll(['studentLastName', 'studentFirstName', 'createdAt'])
+        && incoming().studentLastName is string && incoming().studentLastName.size() <= 60
+        && incoming().studentFirstName is string && incoming().studentFirstName.size() <= 60
+        && incoming().createdAt == request.time;
+      
+      // Bloqué au public en lecture
+      allow read, update, delete: if isSignedIn();
+    }
+
+    // 3. FICHIER DES ÉLÈVES (RGPD & Données mineurs protégées)
+    // Accès réservé aux enseignants et administrateurs de l'AS
+    match /students/{studentId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // 4. CONVOCATIONS OFFICIELLES
+    match /convocations/{convocationId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // 5. SÉANCES DU CALENDRIER (Consultation publique du planning des entraînements)
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // 6. PARAMÈTRES DE L'AS
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // 7. ENSEIGNANTS
+    match /teachers/{teacherId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Verrouillage par défaut de toute autre collection non spécifiée
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
+
