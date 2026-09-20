@@ -525,7 +525,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                 Formulaire d'inscription & adhésion à l'AS
               </h3>
               <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                Téléchargez la fiche d'inscription officielle pour participer aux entraînements et compétitions du mercredi. Document à compléter et remettre aux professeurs d'EPS.
+                Votre adhésion doit être à jour (autorisation parentale et règlement) pour participer aux entraînements du soir et aux évènements du mercredi. Document à remettre aux professeurs d'EPS.
               </p>
             </div>
           </div>
