@@ -299,6 +299,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
   };
 
   const printDocument = (type: 'liste' | 'convocation' | 'projet', eventOverride?: CalendarEvent) => {
+    if (isPublic) return; // Sécurité absolue : les listings sont réservés exclusivement à l'administrateur
     const targetEvent = eventOverride || selectedEvent;
     if (!targetEvent) return;
     
@@ -387,8 +388,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
               <tr>
                 <th>Nom</th>
                 <th>Prénom</th>
-                <th>Classe</th>
-                ${type === 'liste' ? '<th>Présent</th><th>Observation</th>' : ''}
+                ${!isPublic ? '<th>Classe</th>' : ''}
+                ${type === 'liste' && !isPublic ? '<th>Présent</th><th>Observation</th>' : ''}
               </tr>
             </thead>
             <tbody>
@@ -396,8 +397,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                 <tr>
                   <td><strong>${s.lastName || ''}</strong></td>
                   <td>${s.firstName || ''}</td>
-                  <td>${s.classGroup || ''}</td>
-                  ${type === 'liste' ? '<td></td><td></td>' : ''}
+                  ${!isPublic ? `<td>${s.classGroup || ''}</td>` : ''}
+                  ${type === 'liste' && !isPublic ? '<td></td><td></td>' : ''}
                 </tr>
               `).join('')}
             </tbody>
@@ -838,18 +839,23 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                       );
                     }
                     
-                    if (isConvocation || (isSession && isClosed)) {
+                    if (isConvocation) {
                       return (
-                        <div className="flex flex-col items-center gap-3">
-                          {isFull && !isConvocation && <p className="text-amber-600 font-semibold mb-2">Les inscriptions sont closes (complet).</p>}
-                          {isClosed && !isFull && !isConvocation && <p className="text-amber-600 font-semibold mb-2">Les inscriptions sont closes (date passée).</p>}
-                          <button 
-                            onClick={() => printDocument('convocation')}
-                            className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-colors shadow-sm"
-                          >
-                            <FileText className="w-5 h-5" />
-                            Télécharger la convocation
-                          </button>
+                        <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 text-sm max-w-md mx-auto">
+                          <p className="font-bold mb-1">Rencontre / Compétition UNSS</p>
+                          <p className="text-xs text-indigo-700 leading-relaxed">
+                            Événement sur convocation nominative. Les convocations et listings officiels sont transmis directement par l'enseignant responsable.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    if (isSession && isClosed) {
+                      return (
+                        <div className="p-4 bg-slate-100 border border-slate-200 rounded-xl text-slate-700 text-sm max-w-md mx-auto font-medium">
+                          {isFull 
+                            ? "Les inscriptions en ligne sont closes (séance complète)." 
+                            : "Les inscriptions en ligne pour cette séance sont closes."}
                         </div>
                       );
                     }

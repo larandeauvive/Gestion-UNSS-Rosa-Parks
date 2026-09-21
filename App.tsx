@@ -223,9 +223,9 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Real-time Firestore sync for students
+  // Real-time Firestore sync for students (réservé exclusivement à l'administrateur / enseignant)
   useEffect(() => {
-    if (!isAuthenticated && !isPublicCalendar && !isPublicTeacher) {
+    if (!isAuthenticated && !isPublicTeacher) {
       setLoading(false);
       return;
     }
@@ -250,7 +250,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [isAuthenticated, isPublicCalendar, isPublicTeacher]);
+  }, [isAuthenticated, isPublicTeacher]);
   
 
   // Filter Logic
@@ -320,7 +320,7 @@ export default function App() {
       <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
         <div className="max-w-7xl mx-auto w-full p-6 space-y-4">
           <CalendarView 
-            students={students.filter(s => s.schoolYear === activeYear)}
+            students={[]}
             activeYear={activeYear}
             isPublic={true}
           />

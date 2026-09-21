@@ -133,7 +133,10 @@ export function PrivacyPolicyModal({ isOpen, onClose }: PrivacyPolicyModalProps)
                 <strong className="text-slate-700">Hébergement :</strong> Les services s'appuient sur les environnements sécurisés et souverains dédiés à la communauté éducative (services Nuage / Apps Éducation & forge GitLab académique).
               </li>
               <li>
-                <strong className="text-slate-700">Contrôle d'accès Firebase :</strong> La base de données applique des règles de sécurité (Firestore Security Rules) strictes : les formulaires de contact ou d'inscription n'autorisent que l'écriture à l'aveugle (blind write) avec contrôle de format. Toute lecture publique est rigoureusement bloquée, l'accès en lecture étant réservé aux enseignants d'EPS et administrateurs authentifiés.
+                <strong className="text-slate-700">Contrôle d'accès et minimisation stricte (Éducation Nationale) :</strong> L'accès public extérieur est strictement circonscrit au Nom et Prénom uniquement pour la sélection lors de l'inscription aux séances. L'ensemble des autres données personnelles (dates de naissance, coordonnées, classes, suivi financier, attestations médicales et autorisations) est hermétiquement verrouillé et accessible exclusivement par l'administrateur coordonnateur de l'AS.
+              </li>
+              <li>
+                <strong className="text-slate-700">Sécurité Firestore & Portes fermées :</strong> Les règles de sécurité (Firestore Security Rules) bloquent tout accès non autorisé par défaut. Aucune donnée sensible n'est transmise ni consultable de l'extérieur.
               </li>
               <li>
                 Toutes les transmissions sont chiffrées de bout en bout via le protocole sécurisé HTTPS / TLS.

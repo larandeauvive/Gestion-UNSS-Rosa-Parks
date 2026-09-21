@@ -310,16 +310,39 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
           delete (dataToSave as any).id;
           docRef = doc(db, "students", id);
           batch.update(docRef, dataToSave as any);
+          batch.set(doc(db, "public_students_directory", id), {
+            lastName: (dataToSave as any).lastName || '',
+            firstName: (dataToSave as any).firstName || '',
+            schoolYear: (dataToSave as any).schoolYear || activeYear,
+            classGroup: (dataToSave as any).classGroup || '',
+            paid: (dataToSave as any).paid || 'NON',
+            parentalAuth: (dataToSave as any).parentalAuth || 'NON',
+            swimmingCertificate: (dataToSave as any).swimmingCertificate || 'NON',
+            imageRights: (dataToSave as any).imageRights || 'NON',
+            licenseNumber: (dataToSave as any).licenseNumber || ''
+          }, { merge: true });
         } else {
           docRef = doc(collection(db, "students"));
           batch.set(docRef, dataToSave);
+          batch.set(doc(db, "public_students_directory", docRef.id), {
+            lastName: (dataToSave as any).lastName || '',
+            firstName: (dataToSave as any).firstName || '',
+            schoolYear: (dataToSave as any).schoolYear || activeYear,
+            classGroup: (dataToSave as any).classGroup || '',
+            paid: (dataToSave as any).paid || 'NON',
+            parentalAuth: (dataToSave as any).parentalAuth || 'NON',
+            swimmingCertificate: (dataToSave as any).swimmingCertificate || 'NON',
+            imageRights: (dataToSave as any).imageRights || 'NON',
+            licenseNumber: (dataToSave as any).licenseNumber || ''
+          });
         }
         
-        count++;
+        count += 2;
         
-        if (count % 499 === 0) {
+        if (count >= 400) {
           await batch.commit();
           batch = writeBatch(db);
+          count = 0;
         }
       }
 
@@ -327,15 +350,17 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
         if (!student.id) continue;
         const docRef = doc(db, "students", student.id);
         batch.delete(docRef);
-        count++;
+        batch.delete(doc(db, "public_students_directory", student.id));
+        count += 2;
         
-        if (count % 499 === 0) {
+        if (count >= 400) {
           await batch.commit();
           batch = writeBatch(db);
+          count = 0;
         }
       }
       
-      if (count > 0 && count % 499 !== 0) {
+      if (count > 0) {
         await batch.commit();
       }
       

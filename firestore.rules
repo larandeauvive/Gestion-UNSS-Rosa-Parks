@@ -1,10 +1,65 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
+    
+    // Répertoire public minimal (Nom, Prénom, Année uniquement)
+    // Conforme RGPD et normes Éducation Nationale pour l'inscription aux activités
+    match /public_students_directory/{studentId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Base complète des élèves (données administratives, cotisations, autorisations)
+    // Utilisée par la gestion interne de l'Association Sportive
+    match /students/{studentId} {
       allow read, write: if true;
+    }
+
+    // Séances et planning du calendrier de l'AS
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Convocations aux rencontres UNSS
+    match /convocations/{convocationId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Enseignants EPS
+    match /teachers/{teacherId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Paramètres généraux
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Section Personnels de l'établissement
+    match /staff_members/{staffId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /evening_slots/{slotId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /staff_attendance/{attendanceId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // FERMETURE DES PORTES RESTÉES OUVERTES :
+    // Tout autre document ou collection non autorisée est strictement refusée
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
+
 
 

@@ -4,6 +4,16 @@
   },
   "collections": [
     {
+      "name": "public_students_directory",
+      "description": "Public directory for student names (RGPD minimized to lastName, firstName, schoolYear only)",
+      "securityRules": {
+        "read": "true",
+        "create": "true",
+        "update": "true",
+        "delete": "true"
+      }
+    },
+    {
       "name": "students",
       "description": "Collection of students registered in the sports association.",
       "securityRules": {

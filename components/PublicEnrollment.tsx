@@ -1,8 +1,8 @@
 import { collection, query, updateDoc, doc, where, getDoc, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import React, { useState, useEffect, useMemo } from 'react';
-import { Student, Session } from '../types';
-import { CheckCircle2, Search, AlertTriangle, ShieldCheck, Users } from 'lucide-react';
+import { PublicStudent, Session } from '../types';
+import { CheckCircle2, Search, AlertTriangle, ShieldCheck, Users, Lock } from 'lucide-react';
 
 interface PublicEnrollmentProps {
   sessionId: string;
@@ -10,7 +10,7 @@ interface PublicEnrollmentProps {
 
 export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
   const [session, setSession] = useState<Session | null>(null);
-  const [students, setStudents] = useState<Student[]>([]);
+  const [students, setStudents] = useState<PublicStudent[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -28,11 +28,15 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
         const sessionData = { id: sessionDoc.id, ...sessionDoc.data() } as Session;
         setSession(sessionData);
 
-        const studentsQuery = query(collection(db, 'students'), where('schoolYear', '==', sessionData.schoolYear));
+        // Répertoire public conforme RGPD / Éducation Nationale (uniquement Nom et Prénom)
+        const studentsQuery = query(
+          collection(db, 'public_students_directory'), 
+          where('schoolYear', '==', sessionData.schoolYear)
+        );
         const studentsSnapshot = await getDocs(studentsQuery);
-        const studentsList: Student[] = [];
+        const studentsList: PublicStudent[] = [];
         studentsSnapshot.forEach(doc => {
-          studentsList.push({ id: doc.id, ...doc.data() } as Student);
+          studentsList.push({ id: doc.id, ...doc.data() } as PublicStudent);
         });
         setStudents(studentsList);
         setLoading(false);
@@ -51,23 +55,12 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = (student.lastName || '').toLowerCase().includes(searchLower) ||
                             (student.firstName || '').toLowerCase().includes(searchLower);
-                            
-      if (!matchesSearch) return false;
-      
-      if (session?.targetAudience === 'students' && student.isAdult) return false;
-      if (session?.targetAudience === 'adults' && !student.isAdult) return false;
-      
-      return true;
+      return matchesSearch;
     });
-  }, [students, searchTerm, session]);
+  }, [students, searchTerm]);
 
-  const handleEnroll = async (student: Student) => {
+  const handleEnroll = async (student: PublicStudent) => {
     if (!session) return;
-    
-    if (session.requireLicense && !student.licenseNumber) {
-      alert(`Désolé ${student.firstName}, vous ne pouvez pas vous inscrire car vous n'êtes pas à jour de votre licence.`);
-      return;
-    }
 
     setEnrollingId(student.id);
     try {
@@ -191,38 +184,77 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
                 <div className="space-y-3">
                   {filteredStudents.map(student => {
                     const isEnrolled = (session.enrolledStudentIds || []).includes(student.id);
-                    const missingLicense = session.requireLicense && !student.licenseNumber;
                     
                     return (
-                      <div key={student.id} className={`p-4 rounded-xl border ${isEnrolled ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'} flex items-center justify-between`}>
-                        <div>
-                          <div className="font-bold text-slate-800 text-lg flex items-center gap-1.5 flex-wrap">
-                            {String(student.parentalAuth).toUpperCase() !== 'OUI' && <span title="Autorisation parentale manquante" className="text-base text-rose-500 leading-none mb-0.5">AP🚫</span>}
-                            {String(student.swimmingCertificate).toUpperCase() !== 'OUI' && <span title="Savoir nager non validé" className="text-base">🏊‍♂️🚫</span>}
-                            {String(student.imageRights).toUpperCase() !== 'OUI' && <span title="Droit à l'image non validé" className="text-base">📷🚫</span>}
-                            {String(student.paid).toUpperCase() !== 'OUI' && <span title="Paiement manquant" className="text-base text-rose-500 leading-none mb-0.5">€🚫</span>}
+                      <div key={student.id} className={`p-4 rounded-xl border ${isEnrolled ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'} flex items-center justify-between gap-4`}>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-bold text-slate-900 text-base sm:text-lg flex items-center gap-2 flex-wrap">
                             <span>{student.lastName} {student.firstName}</span>
+                            {student.classGroup && (
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                                {student.classGroup}
+                              </span>
+                            )}
                           </div>
-                          <div className="text-sm text-slate-500 mt-1">Classe : {student.classGroup}</div>
-                          {missingLicense && !isEnrolled && (
-                            <div className="text-xs text-amber-600 font-medium flex items-center gap-1 mt-1">
-                              <AlertTriangle className="w-3 h-3" /> Pas de licence enregistrée (l'inscription reste possible)
+
+                          {/* Statuts administratifs pour l'information de l'élève */}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                            {String(student.paid).toUpperCase() === 'OUI' ? (
+                              <span title="Cotisation réglée" className="inline-flex items-center gap-1 text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">
+                                € Cotisation réglée
+                              </span>
+                            ) : (
+                              <span title="Cotisation non réglée" className="inline-flex items-center gap-1 text-[11px] font-semibold bg-rose-100 text-rose-800 px-2 py-0.5 rounded-md">
+                                €🚫 Cotisation manquante
+                              </span>
+                            )}
+
+                            {String(student.parentalAuth).toUpperCase() === 'OUI' ? (
+                              <span title="Autorisation parentale validée" className="inline-flex items-center gap-1 text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">
+                                AP validée
+                              </span>
+                            ) : (
+                              <span title="Autorisation parentale manquante" className="inline-flex items-center gap-1 text-[11px] font-semibold bg-rose-100 text-rose-800 px-2 py-0.5 rounded-md">
+                                AP🚫 Autorisation manquante
+                              </span>
+                            )}
+
+                            {String(student.swimmingCertificate).toUpperCase() !== 'OUI' && (
+                              <span title="Attestation savoir nager non validée" className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
+                                🏊‍♂️🚫 Savoir nager non validé
+                              </span>
+                            )}
+
+                            {String(student.imageRights).toUpperCase() !== 'OUI' && (
+                              <span title="Droit à l'image non validé" className="inline-flex items-center gap-1 text-[11px] font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
+                                📷🚫 Droit à l'image non validé
+                              </span>
+                            )}
+                          </div>
+
+                          {session.requireLicense && !student.licenseNumber && !isEnrolled && (
+                            <div className="text-xs text-amber-700 font-medium flex items-center gap-1 mt-2">
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                              <span>Pas de licence enregistrée (l'inscription reste possible)</span>
                             </div>
                           )}
                         </div>
-                        {isEnrolled ? (
-                          <div className="flex items-center gap-2 text-emerald-600 font-bold bg-emerald-100 px-3 py-1.5 rounded-lg">
-                            <CheckCircle2 className="w-5 h-5" /> Inscrit
-                          </div>
-                        ) : (
-                          <button 
-                            onClick={() => handleEnroll(student)}
-                            disabled={enrollingId === student.id || (session.maxParticipants !== undefined && (session.enrolledStudentIds || []).length >= session.maxParticipants)}
-                            className={`px-4 py-2 rounded-lg font-bold transition-colors ${(session.maxParticipants !== undefined && (session.enrolledStudentIds || []).length >= session.maxParticipants) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
-                          >
-                            {enrollingId === student.id ? '...' : (session.maxParticipants !== undefined && (session.enrolledStudentIds || []).length >= session.maxParticipants ? 'Complet' : 'S\'inscrire')}
-                          </button>
-                        )}
+
+                        <div className="shrink-0">
+                          {isEnrolled ? (
+                            <div className="flex items-center gap-1.5 text-emerald-600 font-bold bg-emerald-100 px-3 py-1.5 rounded-lg text-sm">
+                              <CheckCircle2 className="w-4 h-4" /> Inscrit
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => handleEnroll(student)}
+                              disabled={enrollingId === student.id || (session.maxParticipants !== undefined && (session.enrolledStudentIds || []).length >= session.maxParticipants)}
+                              className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${(session.maxParticipants !== undefined && (session.enrolledStudentIds || []).length >= session.maxParticipants) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                            >
+                              {enrollingId === student.id ? '...' : (session.maxParticipants !== undefined && (session.enrolledStudentIds || []).length >= session.maxParticipants ? 'Complet' : 'S\'inscrire')}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}

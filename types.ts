@@ -21,6 +21,24 @@ export interface Student {
   [key: string]: string | boolean | undefined; // Index signature for dynamic access
 }
 
+/**
+ * Répertoire public minimal d'inscription
+ * Contient le nom, prénom et les statuts administratifs (€, AP, natation, image)
+ * pour informer directement l'élève lors de sa démarche d'inscription
+ */
+export interface PublicStudent {
+  id: string;
+  lastName: string;
+  firstName: string;
+  classGroup?: string;
+  schoolYear?: string;
+  paid?: string; // OUI/NON pour affichage statut €
+  parentalAuth?: string; // OUI/NON pour affichage statut AP
+  swimmingCertificate?: string; // OUI/NON pour statut savoir nager
+  imageRights?: string; // OUI/NON pour droit à l'image
+  licenseNumber?: string;
+}
+
 export interface CsvRow {
   "Nom": string;
   "Prénom": string;

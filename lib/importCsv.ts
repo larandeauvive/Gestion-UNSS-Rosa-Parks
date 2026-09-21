@@ -36,22 +36,36 @@ export async function importFromCSV(schoolYear: string): Promise<number> {
               size: forceString(row['Taille'])
             }));
 
-          const batch = writeBatch(db);
+          let batch = writeBatch(db);
           let count = 0;
           
           for (const student of mappedData) {
             const docRef = doc(collection(db, "students"));
             batch.set(docRef, student);
-            count++;
+            // Synchronisation répertoire public (RGPD avec statuts informatifs)
+            const publicRef = doc(db, "public_students_directory", docRef.id);
+            batch.set(publicRef, {
+              lastName: student.lastName || '',
+              firstName: student.firstName || '',
+              schoolYear: student.schoolYear || schoolYear,
+              classGroup: student.classGroup || '',
+              paid: student.paid || 'NON',
+              parentalAuth: student.parentalAuth || 'NON',
+              swimmingCertificate: student.swimmingCertificate || 'NON',
+              imageRights: student.imageRights || 'NON',
+              licenseNumber: student.licenseNumber || ''
+            });
+            count += 2;
             
-            // max batch size in firestore is 500, if needed could chunk, but typically school < 500
-            if (count % 499 === 0) {
+            if (count % 400 === 0) {
               await batch.commit();
-              // A real robust importer would create a new batch here, but let's assume < 500 per run
+              batch = writeBatch(db);
             }
           }
-          await batch.commit();
-          resolve(count);
+          if (count % 400 !== 0) {
+            await batch.commit();
+          }
+          resolve(mappedData.length);
         } catch (err) {
           reject(err);
         }
