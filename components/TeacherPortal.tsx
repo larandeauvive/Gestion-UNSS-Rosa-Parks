@@ -5,7 +5,8 @@ import { CalendarView } from './CalendarView';
 import { StudentTable } from './StudentTable';
 import { ConvocationManager } from './ConvocationManager';
 import { TeacherManager } from './TeacherManager';
-import { CalendarDays, Users, Search, Activity, Printer, ClipboardList, GraduationCap, LogOut } from 'lucide-react';
+import { StaffManager } from './StaffManager';
+import { CalendarDays, Users, Search, Activity, Printer, ClipboardList, GraduationCap, LogOut, Briefcase } from 'lucide-react';
 import { formatDateFr } from '../lib/utils';
 
 interface Props {
@@ -15,7 +16,7 @@ interface Props {
 }
 
 export const TeacherPortal: React.FC<Props> = ({ students, activeYear, onLogout }) => {
-  const [currentTab, setCurrentTab] = useState<'seances' | 'calendrier' | 'licences' | 'convocations' | 'enseignants'>('seances');
+  const [currentTab, setCurrentTab] = useState<'seances' | 'calendrier' | 'licences' | 'convocations' | 'enseignants' | 'personnel'>('seances');
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -150,6 +151,7 @@ export const TeacherPortal: React.FC<Props> = ({ students, activeYear, onLogout 
             { id: 'convocations', label: 'Convocations', icon: ClipboardList },
             { id: 'calendrier', label: 'Calendrier', icon: CalendarDays },
             { id: 'licences', label: 'État des Licences', icon: Users },
+            { id: 'personnel', label: "Personnel de l'établissement", icon: Briefcase },
             { id: 'enseignants', label: 'Enseignants EPS', icon: GraduationCap }
           ].map(tab => (
             <button
@@ -191,6 +193,10 @@ export const TeacherPortal: React.FC<Props> = ({ students, activeYear, onLogout 
 
         {currentTab === 'enseignants' && (
           <TeacherManager />
+        )}
+
+        {currentTab === 'personnel' && (
+          <StaffManager activeYear={activeYear} />
         )}
 
         {currentTab === 'licences' && (

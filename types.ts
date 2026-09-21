@@ -101,3 +101,54 @@ export interface RegistrationFormDoc {
   updatedBy?: string;
   instructions?: string;
 }
+
+export interface EveningSlot {
+  id: string;
+  name: string; // ex: "Badminton / Volley Loisir"
+  dayOfWeek: string; // "Lundi", "Mardi", "Jeudi", etc.
+  startTime: string; // ex: "17:30"
+  endTime: string; // ex: "19:00"
+  location: string; // ex: "Gymnase Rosa Parks"
+  description?: string;
+  coachOrSupervisor?: string;
+  schoolYear: string;
+  active: boolean;
+}
+
+export interface StaffMember {
+  id: string;
+  firstName: string;
+  lastName: string;
+  role: string; // "Enseignant", "AED / Vie scolaire", "Agent technique", "Administration / Direction", "Médico-social", "Autre"
+  discipline?: string; // Matière ou service (ex: "Maths", "Anglais", "Accueil", "Maintenance")
+  email?: string;
+  phone?: string;
+  schoolYear: string;
+  // Statut licence & adhésion
+  isLicenseUpToDate: boolean; // À jour de sa licence
+  licenseNumber?: string;
+  paid: boolean; // Cotisation réglée
+  paymentAmount?: number; // Montant de la cotisation (ex: 20€)
+  paymentMethod?: string; // "Chèque", "Espèces", "Virement", etc.
+  medicalCertOrQuiz: boolean; // Certificat médical / questionnaire de santé attesté
+  parentalOrPersonalAuth: boolean; // Fiche adhésion signée
+  // Inscriptions aux créneaux du soir
+  eveningSlotIds: string[];
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface StaffAttendanceRecord {
+  id: string;
+  date: string; // "YYYY-MM-DD"
+  slotId: string; // ID of EveningSlot
+  slotName: string;
+  schoolYear: string;
+  presentStaffIds: string[]; // Liste des IDs des personnels présents
+  excusedStaffIds?: string[]; // Liste des excusés
+  notes?: string;
+  recordedBy?: string;
+  createdAt: string;
+}
+

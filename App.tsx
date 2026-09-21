@@ -18,6 +18,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { TeacherLoginScreen } from './components/TeacherLoginScreen';
 import { Dashboard } from './components/Dashboard';
 import { CalendarView } from './components/CalendarView';
+import { StaffManager } from './components/StaffManager';
 import { importFromCSV } from './lib/importCsv';
 import { deleteMultipleStudents, updateMultipleStudents, addStudent } from './lib/db';
 import { TeacherPortal } from './components/TeacherPortal';
@@ -186,7 +187,7 @@ export default function App() {
   // View State
   const [activeYear, setActiveYear] = useState<string>('2025-2026');
   
-  const [currentTab, setCurrentTab] = useState<'eleves'|'convocations'|'dashboard'|'seances'|'calendrier'>('dashboard');
+  const [currentTab, setCurrentTab] = useState<'eleves'|'convocations'|'dashboard'|'seances'|'calendrier'|'personnel'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [autoCreateConvocation, setAutoCreateConvocation] = useState(false);
@@ -613,34 +614,40 @@ export default function App() {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="max-w-7xl mx-auto px-6 mt-8 flex gap-6 border-b border-slate-700">
+        <div className="max-w-7xl mx-auto px-6 mt-8 flex gap-6 border-b border-slate-700 overflow-x-auto hide-scrollbar">
           <button 
             onClick={() => setCurrentTab('dashboard')}
-            className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'dashboard' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap shrink-0 ${currentTab === 'dashboard' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
           >
             Tableau de Bord
           </button>
           <button 
             onClick={() => setCurrentTab('eleves')}
-            className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'eleves' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap shrink-0 ${currentTab === 'eleves' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
           >
             Liste des Élèves
           </button>
           <button 
+            onClick={() => setCurrentTab('personnel')}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap shrink-0 ${currentTab === 'personnel' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+          >
+            Personnel de l'établissement
+          </button>
+          <button 
             onClick={() => setCurrentTab('convocations')}
-            className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'convocations' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap shrink-0 ${currentTab === 'convocations' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
           >
             Gestion des Convocations
           </button>
           <button 
             onClick={() => setCurrentTab('seances')}
-            className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'seances' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap shrink-0 ${currentTab === 'seances' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
           >
             Créneaux Hebdomadaires
           </button>
           <button 
             onClick={() => setCurrentTab('calendrier')}
-            className={`pb-4 text-sm font-semibold transition-colors border-b-2 ${currentTab === 'calendrier' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+            className={`pb-4 text-sm font-semibold transition-colors border-b-2 whitespace-nowrap shrink-0 ${currentTab === 'calendrier' ? 'border-white text-white' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
           >
             Calendrier
           </button>
@@ -816,6 +823,10 @@ export default function App() {
             students={students.filter(s => s.schoolYear === activeYear)}
             activeYear={activeYear}
           />
+        )}
+
+        {currentTab === 'personnel' && (
+          <StaffManager activeYear={activeYear} />
         )}
       </main>
 

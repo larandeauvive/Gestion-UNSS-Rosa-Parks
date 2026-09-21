@@ -52,6 +52,36 @@
         "update": "true",
         "delete": "true"
       }
+    },
+    {
+      "name": "staff_members",
+      "description": "Personnel de l'établissement adhérents de l'AS",
+      "securityRules": {
+        "read": "true",
+        "create": "true",
+        "update": "true",
+        "delete": "true"
+      }
+    },
+    {
+      "name": "evening_slots",
+      "description": "Créneaux sportifs du soir pour les personnels",
+      "securityRules": {
+        "read": "true",
+        "create": "true",
+        "update": "true",
+        "delete": "true"
+      }
+    },
+    {
+      "name": "staff_attendance",
+      "description": "Pointages de fréquentation des séances du soir par les personnels",
+      "securityRules": {
+        "read": "true",
+        "create": "true",
+        "update": "true",
+        "delete": "true"
+      }
     }
   ]
 }
