@@ -1,8 +1,11 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from './lib/firebase';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { Student, ColumnDefinition } from './types';
-import { Users, CheckCircle, Download, Printer, Search, Settings2, Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, PlusCircle, LogOut, KeyRound, ShieldAlert, RefreshCw, Copy, Check } from 'lucide-react';
+import { 
+  Users, CheckCircle, Download, Printer, Search, Settings2, 
+  Database, Trash2, ArrowRightLeft, CalendarDays, Loader2, 
+  PlusCircle, LogOut, KeyRound, ShieldAlert, RefreshCw, Copy, 
+  Check, CloudUpload, ExternalLink, FileText 
+} from 'lucide-react';
 import { StatCard } from './components/StatCard';
 import { Modal } from './components/Modal';
 import { BackupManager } from './components/BackupManager';
@@ -20,7 +23,10 @@ import { Dashboard } from './components/Dashboard';
 import { CalendarView } from './components/CalendarView';
 import { StaffManager } from './components/StaffManager';
 import { importFromCSV } from './lib/importCsv';
-import { deleteMultipleStudents, updateMultipleStudents, addStudent } from './lib/db';
+import { 
+  deleteMultipleStudents, updateMultipleStudents, addStudent, 
+  getStudentsList, getAppSetting, saveAppSetting 
+} from './lib/db';
 import { TeacherPortal } from './components/TeacherPortal';
 import { Footer } from './components/Footer';
 
@@ -74,33 +80,30 @@ export default function App() {
     return 'prof-' + Math.random().toString(36).substring(2, 8) + '-' + Date.now().toString(36).slice(-4);
   };
 
-  // Load Settings from Firestore and evaluate public parameters
+  // Load Settings from DB and evaluate public parameters
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const snap = await getDoc(doc(db, 'settings', 'general'));
+        const snap = await getAppSetting('general');
         let currentToken = '';
         let currentPwd = 'ASRP2026';
 
-        if (snap.exists()) {
-          const data = snap.data();
-          if (data?.teacherPassword) {
-            currentPwd = data.teacherPassword;
-            setTeacherPassword(data.teacherPassword);
+        if (snap) {
+          if (snap.teacherPassword) {
+            currentPwd = snap.teacherPassword;
+            setTeacherPassword(snap.teacherPassword);
           }
-          if (data?.teacherToken) {
-            currentToken = data.teacherToken;
-            setTeacherToken(data.teacherToken);
+          if (snap.teacherToken) {
+            currentToken = snap.teacherToken;
+            setTeacherToken(snap.teacherToken);
           } else {
-            // First time migration: create a new unique token in Firestore
             currentToken = generateNewToken();
-            await setDoc(doc(db, 'settings', 'general'), { teacherToken: currentToken }, { merge: true });
+            await saveAppSetting('general', { ...snap, teacherToken: currentToken });
             setTeacherToken(currentToken);
           }
         } else {
-          // Initialize settings doc
           currentToken = generateNewToken();
-          await setDoc(doc(db, 'settings', 'general'), { teacherPassword: currentPwd, teacherToken: currentToken }, { merge: true });
+          await saveAppSetting('general', { teacherPassword: currentPwd, teacherToken: currentToken });
           setTeacherToken(currentToken);
         }
 
@@ -150,7 +153,8 @@ export default function App() {
   const handleUpdatePassword = async () => {
     if (!newPassword.trim()) return;
     try {
-      await setDoc(doc(db, 'settings', 'general'), { teacherPassword: newPassword.trim() }, { merge: true });
+      const snap = await getAppSetting('general') || {};
+      await saveAppSetting('general', { ...snap, teacherPassword: newPassword.trim() });
       setTeacherPassword(newPassword.trim());
       setIsPasswordModalOpen(false);
       setNewPassword('');
@@ -168,7 +172,8 @@ export default function App() {
 
     const newToken = generateNewToken();
     try {
-      await setDoc(doc(db, 'settings', 'general'), { teacherToken: newToken }, { merge: true });
+      const snap = await getAppSetting('general') || {};
+      await saveAppSetting('general', { ...snap, teacherToken: newToken });
       setTeacherToken(newToken);
       localStorage.removeItem('teacher_auth');
       localStorage.removeItem('teacher_token');
@@ -211,6 +216,10 @@ export default function App() {
   const [newMember, setNewMember] = useState<Partial<Student>>({});
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [isCopyingSql, setIsCopyingSql] = useState(false);
+  const [isSyncingSupabase, setIsSyncingSupabase] = useState(false);
+  const [syncSupabaseResult, setSyncSupabaseResult] = useState<{ success?: boolean; message?: string } | null>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -223,19 +232,15 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Real-time Firestore sync for students (réservé exclusivement à l'administrateur / enseignant)
-  useEffect(() => {
+  const fetchStudents = useCallback(async () => {
     if (!isAuthenticated && !isPublicTeacher) {
       setLoading(false);
       return;
     }
     setLoading(true);
-    const q = query(collection(db, 'students'), orderBy('lastName', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Student[] = [];
-      snapshot.forEach((doc) => {
-        data.push({ id: doc.id, ...doc.data() } as Student);
-      });
+    try {
+      const data = await getStudentsList();
+      data.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
       setStudents(data);
       if (data.length > 0) {
         const years = Array.from(new Set(data.map(s => s.schoolYear).filter(Boolean))).sort().reverse();
@@ -243,14 +248,16 @@ export default function App() {
           setActiveYear(years[0]);
         }
       }
+    } catch (err) {
+      console.error("Fetch students error:", err);
+    } finally {
       setLoading(false);
-    }, (err) => {
-      console.error("Firestore error:", err);
-      setLoading(false);
-    });
+    }
+  }, [isAuthenticated, isPublicTeacher, activeYear]);
 
-    return () => unsubscribe();
-  }, [isAuthenticated, isPublicTeacher]);
+  useEffect(() => {
+    fetchStudents();
+  }, [fetchStudents]);
   
 
   // Filter Logic
@@ -303,9 +310,8 @@ export default function App() {
 
   const handleOpussCheck = async (id: string, checked: boolean) => {
     try {
-      
       await updateMultipleStudents([id], { opussChecked: checked });
-
+      await fetchStudents();
     } catch (e) {
       console.error("Error updating OPUSS check", e);
     }
@@ -497,7 +503,13 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
-              <h1 className="text-4xl font-extrabold tracking-tight">AS Rosa Parks</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-4xl font-extrabold tracking-tight">AS Rosa Parks</h1>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  Supabase EU (RGPD)
+                </span>
+              </div>
               <p className="text-slate-400 font-medium mt-2">Plateforme de Gestion des Licenciés</p>
             </div>
             
@@ -574,6 +586,20 @@ export default function App() {
                     >
                       <KeyRound className="w-4 h-4 text-slate-500" />
                       Accès & Sécurité Enseignant
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setIsSupabaseModalOpen(true);
+                        setIsSettingsOpen(false);
+                        setSyncSupabaseResult(null);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors text-left border border-emerald-200 mb-2"
+                    >
+                      <CloudUpload className="w-4 h-4 text-emerald-600" />
+                      <div>
+                        <div className="font-semibold text-emerald-900">Transfert Supabase (RGPD)</div>
+                        <div className="text-xs text-emerald-600 font-normal">414 élèves & séances prêts</div>
+                      </div>
                     </button>
                     <button 
                       onClick={() => {
@@ -1022,6 +1048,7 @@ export default function App() {
                       await addStudent(newMember as any);
                       setIsAddMemberModalOpen(false);
                       setNewMember({});
+                      await fetchStudents();
                     } catch (e) {
                       alert("Erreur lors de l'ajout.");
                     }
@@ -1031,6 +1058,172 @@ export default function App() {
                   Ajouter
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isSupabaseModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 md:p-8 my-auto max-h-[90vh] overflow-y-auto border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-start justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-emerald-100 text-emerald-700 rounded-xl">
+                  <CloudUpload className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold text-slate-900">Transfert vers Supabase EU</h2>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      RGPD Conforme
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-500 mt-0.5">
+                    Synchronisation des inscriptions, du calendrier et de la liste des élèves
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsSupabaseModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-6">
+              {/* Résumé des données prêtes */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-center">
+                  <div className="text-2xl font-bold text-slate-900">414</div>
+                  <div className="text-xs font-medium text-slate-500">Élèves licenciés</div>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-center">
+                  <div className="text-2xl font-bold text-slate-900">2</div>
+                  <div className="text-xs font-medium text-slate-500">Séances calendrier</div>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-center">
+                  <div className="text-2xl font-bold text-slate-900">3</div>
+                  <div className="text-xs font-medium text-slate-500">Enseignants EPS</div>
+                </div>
+              </div>
+
+              {/* Option 1 : Script SQL Tout-en-Un (Garanti) */}
+              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-5">
+                <div className="flex items-center gap-2 text-emerald-900 font-semibold mb-1.5">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-white text-xs font-bold">1</span>
+                  Méthode Express : Import SQL Complet (30 secondes)
+                </div>
+                <p className="text-sm text-emerald-800 mb-4 leading-relaxed">
+                  Ce script unique crée toutes les tables nécessaires dans votre base Supabase et injecte directement l'ensemble des <strong>414 élèves</strong>, séances et enseignants avec leurs autorisations et paiements.
+                </p>
+
+                <div className="flex flex-wrap gap-2.5">
+                  <a
+                    href="/api/migration/supabase-sql"
+                    download="supabase-import-all.sql"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Télécharger supabase-import-all.sql
+                  </a>
+
+                  <button
+                    onClick={async () => {
+                      try {
+                        setIsCopyingSql(true);
+                        const res = await fetch('/api/migration/supabase-sql');
+                        const text = await res.text();
+                        await navigator.clipboard.writeText(text);
+                        alert("Le script SQL complet (tables + 414 élèves) a été copié dans votre presse-papiers !");
+                      } catch {
+                        alert("Erreur lors de la copie.");
+                      } finally {
+                        setIsCopyingSql(false);
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-emerald-100/50 text-emerald-800 border border-emerald-300 text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    {isCopyingSql ? <Loader2 className="w-4 h-4 animate-spin" /> : <Copy className="w-4 h-4" />}
+                    Copier tout le SQL
+                  </button>
+
+                  <a
+                    href="https://supabase.com/dashboard/project/jgzcznwurnqefcseougm/sql/new"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-lg transition-colors ml-auto"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Ouvrir Supabase SQL Editor
+                  </a>
+                </div>
+              </div>
+
+              {/* Option 2 : Synchronisation API en direct */}
+              <div className="border border-slate-200 rounded-xl p-5">
+                <div className="flex items-center gap-2 text-slate-900 font-semibold mb-1.5">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-700 text-white text-xs font-bold">2</span>
+                  Synchronisation API directe
+                </div>
+                <p className="text-sm text-slate-600 mb-4 leading-relaxed">
+                  Si les tables sont déjà créées dans votre Supabase, vous pouvez injecter les données directement via l'API.
+                </p>
+
+                <button
+                  disabled={isSyncingSupabase}
+                  onClick={async () => {
+                    setIsSyncingSupabase(true);
+                    setSyncSupabaseResult(null);
+                    try {
+                      const res = await fetch('/api/migration/sync-supabase', { method: 'POST' });
+                      const data = await res.json();
+                      if (data.success) {
+                        setSyncSupabaseResult({ success: true, message: data.message });
+                        await fetchStudents();
+                      } else {
+                        setSyncSupabaseResult({ success: false, message: data.error });
+                      }
+                    } catch (e: any) {
+                      setSyncSupabaseResult({ success: false, message: e.message });
+                    } finally {
+                      setIsSyncingSupabase(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {isSyncingSupabase ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                      Synchronisation en cours...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4 text-slate-600" />
+                      Lancer la synchronisation API
+                    </>
+                  )}
+                </button>
+
+                {syncSupabaseResult && (
+                  <div className={`mt-4 p-3.5 rounded-lg text-sm ${
+                    syncSupabaseResult.success 
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                      : 'bg-amber-50 text-amber-800 border border-amber-200'
+                  }`}>
+                    {syncSupabaseResult.message}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end pt-4 border-t border-slate-100">
+              <button
+                onClick={() => setIsSupabaseModalOpen(false)}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors"
+              >
+                Fermer
+              </button>
             </div>
           </div>
         </div>

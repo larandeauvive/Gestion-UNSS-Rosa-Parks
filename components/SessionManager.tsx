@@ -1,9 +1,8 @@
-import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Student, Session } from '../types';
 import { PlusCircle, Calendar, Trash2, CheckCircle2, Circle, Users, Save, Link2 } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
+import { getSessionsList, saveSessionApi, deleteSessionApi, getTeachersList, saveConvocationApi } from '../lib/db';
 
 interface SessionManagerProps {
   students: Student[];
@@ -33,33 +32,29 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
   const newSession = formData;
   const [editingSession, setEditingSession] = useState<Session | null>(null);
 
-  useEffect(() => {
-    const qTeachers = query(collection(db, 'teachers'));
-    const unsubscribeTeachers = onSnapshot(qTeachers, (snapshot: any) => {
-      const data: any[] = [];
-      snapshot.forEach((doc: any) => data.push({ id: doc.id, ...doc.data() }));
-      setTeachers(data);
-    });
-
-    const q = query(collection(db, 'sessions'), where('schoolYear', '==', activeYear));
-    const unsubscribeSessions = onSnapshot(q, (snapshot: any) => {
-      const data: any[] = [];
-      snapshot.forEach((doc: any) => data.push({ id: doc.id, ...doc.data() }));
-      data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setSessions(data);
-    });
-
-    return () => {
-      unsubscribeTeachers();
-      unsubscribeSessions();
-    };
+  const fetchSessionManagerData = useCallback(async () => {
+    try {
+      const [tList, sList] = await Promise.all([
+        getTeachersList(),
+        getSessionsList(activeYear)
+      ]);
+      setTeachers(tList);
+      sList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setSessions(sList);
+    } catch (err) {
+      console.warn("Erreur chargement séances:", err);
+    }
   }, [activeYear]);
 
-const handleCreate = async (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchSessionManagerData();
+  }, [fetchSessionManagerData]);
+
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.date) return;
     try {
-      let firstDocId = null;
+      let firstDocId: string | null = null;
       const count = isRecurring ? Math.max(1, recurrenceCount) : 1;
       
       for (let i = 0; i < count; i++) {
@@ -67,22 +62,21 @@ const handleCreate = async (e: React.FormEvent) => {
         d.setDate(d.getDate() + (i * 7));
         const dateStr = d.toISOString().slice(0, 10);
         
-        
-      
-      const docRef = await addDoc(collection(db, 'sessions'), {
-        ...newSession,
-        schoolYear: activeYear,
-        enrolledStudentIds: [],
-        presentStudentIds: [],
-        requireLicense: newSession.requireLicense || false
-      });
- // Mock for success
+        const created = await saveSessionApi({
+          ...newSession,
+          date: dateStr,
+          schoolYear: activeYear,
+          enrolledStudentIds: [],
+          presentStudentIds: [],
+          requireLicense: newSession.requireLicense || false
+        });
 
-        if (i === 0) firstDocId = docRef.id;
+        if (i === 0 && created?.id) firstDocId = created.id;
       }
       
       if (firstDocId) setActiveSessionId(firstDocId);
       setIsCreating(false);
+      await fetchSessionManagerData();
     } catch (error) {
       console.error(error);
       alert("Erreur lors de la création de la séance.");
@@ -92,8 +86,9 @@ const handleCreate = async (e: React.FormEvent) => {
   const confirmDelete = async () => {
     if (!sessionToDelete) return;
     try {
-      await deleteDoc(doc(db, 'sessions', sessionToDelete));
+      await deleteSessionApi(sessionToDelete);
       if (activeSessionId === sessionToDelete) setActiveSessionId(null);
+      await fetchSessionManagerData();
     } catch (err) {
       console.error(err);
     }
@@ -117,16 +112,19 @@ const handleCreate = async (e: React.FormEvent) => {
 
     try {
       const newEnrolledIds = Array.from(enrolled);
-      await updateDoc(doc(db, 'sessions', activeSession.id), {
+      await saveSessionApi({
+        id: activeSession.id,
         enrolledStudentIds: newEnrolledIds,
         presentStudentIds: Array.from(present)
       });
       
       if (activeSession.convocationId) {
-         await updateDoc(doc(db, 'convocations', activeSession.convocationId), {
+         await saveConvocationApi({
+           id: activeSession.convocationId,
            studentIds: newEnrolledIds
          });
       }
+      await fetchSessionManagerData();
     } catch (err) {
       console.error(err);
     }
@@ -141,9 +139,11 @@ const handleCreate = async (e: React.FormEvent) => {
       present.add(studentId);
     }
     try {
-      await updateDoc(doc(db, 'sessions', activeSession.id), {
+      await saveSessionApi({
+        id: activeSession.id,
         presentStudentIds: Array.from(present)
       });
+      await fetchSessionManagerData();
     } catch (err) {
       console.error(err);
     }

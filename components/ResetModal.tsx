@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Trash2 } from 'lucide-react';
 import { Modal } from './Modal';
-import { collection, getDocs, writeBatch } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { resetDatabaseApi } from '../lib/db';
 
 interface ResetModalProps {
   isOpen: boolean;
@@ -14,6 +13,7 @@ export function ResetModal({ isOpen, onClose }: ResetModalProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [resetType, setResetType] = useState<'calendar' | 'all'>('calendar');
+  const [loading, setLoading] = useState(false);
 
   const handleNext = () => {
     if (password !== 'EPS2026') {
@@ -24,44 +24,22 @@ export function ResetModal({ isOpen, onClose }: ResetModalProps) {
     setStep(2);
   };
 
-  const deleteCollectionDocs = async (colName: string) => {
-    const snap = await getDocs(collection(db, colName));
-    let batch = writeBatch(db);
-    let count = 0;
-    for (const d of snap.docs) {
-      batch.delete(d.ref);
-      count++;
-      if (count % 450 === 0) {
-        await batch.commit();
-        batch = writeBatch(db);
-      }
-    }
-    if (count % 450 !== 0) {
-      await batch.commit();
-    }
-  };
-
   const handleConfirm = async () => {
+    setLoading(true);
     try {
-      if (resetType === 'calendar') {
-        await deleteCollectionDocs('sessions');
-        await deleteCollectionDocs('convocations');
-      } else {
-        await deleteCollectionDocs('sessions');
-        await deleteCollectionDocs('convocations');
-        await deleteCollectionDocs('students');
-        await deleteCollectionDocs('teachers');
-      }
+      await resetDatabaseApi(resetType);
       onClose();
-      // Reset state on close
       setTimeout(() => {
         setStep(1);
         setPassword('');
         setError('');
       }, 300);
-    } catch (err) {
+      window.location.reload();
+    } catch (err: any) {
       console.error(err);
-      setError('Erreur lors de la réinitialisation');
+      setError(err.message || 'Erreur lors de la réinitialisation');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -104,37 +82,36 @@ export function ResetModal({ isOpen, onClose }: ResetModalProps) {
                 className="w-4 h-4 text-red-600"
               />
               <div>
-                <div className="font-medium text-red-900">Tout réinitialiser</div>
-                <div className="text-xs text-red-700">Supprime TOUTES les données (élèves, séances, profs...).</div>
+                <div className="font-medium text-red-900">Réinitialiser toute l'application</div>
+                <div className="text-xs text-red-700">Supprime TOUTES les données : élèves, séances, convocations, enseignants, personnels.</div>
               </div>
             </label>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Mot de passe de sécurité
-            </label>
-            <input
-              type="password"
+            <label className="block text-sm font-medium text-slate-700 mb-1">Mot de passe de confirmation</label>
+            <input 
+              type="password" 
               value={password}
-              onChange={(e) => { setPassword(e.target.value); setError(''); }}
-              className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-              placeholder="Entrez le mot de passe pour continuer"
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Entrez le mot de passe"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
             />
-            {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+            {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <button
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button 
+              type="button" 
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
+              className="px-4 py-2 border rounded-lg text-slate-700 hover:bg-slate-50 font-medium"
             >
               Annuler
             </button>
-            <button
+            <button 
+              type="button" 
               onClick={handleNext}
-              disabled={!password}
-              className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors disabled:opacity-50"
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center gap-2"
             >
               Continuer
             </button>
@@ -143,27 +120,33 @@ export function ResetModal({ isOpen, onClose }: ResetModalProps) {
       ) : (
         <div className="space-y-4">
           <div className="bg-red-50 p-4 rounded-lg border border-red-200 text-center">
-            <Trash2 className="w-12 h-12 text-red-500 mx-auto mb-2" />
-            <h3 className="text-lg font-bold text-red-900 mb-2">Confirmation finale</h3>
-            <p className="text-red-700 text-sm">
+            <Trash2 className="w-12 h-12 text-red-600 mx-auto mb-2" />
+            <h3 className="text-lg font-bold text-red-900 mb-1">Êtes-vous absolument sûr ?</h3>
+            <p className="text-sm text-red-700">
               {resetType === 'calendar' 
-                ? "Vous êtes sur le point de supprimer DÉFINITIVEMENT toutes les séances et convocations. Cette action ne peut pas être annulée."
-                : "Vous êtes sur le point de supprimer DÉFINITIVEMENT TOUTE la base de données. L'application sera entièrement vide."}
+                ? 'Toutes les séances et convocations seront définitivement supprimées.' 
+                : 'TOUTES les données de la base PostgreSQL seront définitivement supprimées.'}
             </p>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <button
+          {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button 
+              type="button" 
               onClick={() => setStep(1)}
-              className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
+              disabled={loading}
+              className="px-4 py-2 border rounded-lg text-slate-700 hover:bg-slate-50 font-medium"
             >
               Retour
             </button>
-            <button
+            <button 
+              type="button" 
               onClick={handleConfirm}
-              className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+              disabled={loading}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center gap-2"
             >
-              Oui, je confirme la suppression
+              {loading ? 'Réinitialisation...' : 'Oui, supprimer définitivement'}
             </button>
           </div>
         </div>

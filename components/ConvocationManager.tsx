@@ -1,9 +1,8 @@
-import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Convocation, Student } from '../types';
 import { PlusCircle, Trash2, Printer, Search, X, Save, Edit3, ChevronRight } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
+import { getConvocationsList, saveConvocationApi, deleteConvocationApi, getTeachersList, saveSessionApi } from '../lib/db';
 
 interface Props {
   students: Student[];
@@ -27,17 +26,25 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
 
   const [teachers, setTeachers] = useState<{id: string, name: string}[]>([]);
 
+  const fetchConvocationsData = useCallback(async () => {
+    try {
+      const [tList, cList] = await Promise.all([
+        getTeachersList(),
+        getConvocationsList(activeYear)
+      ]);
+      setTeachers(tList.map(t => ({ id: t.id, name: t.name })));
+      cList.sort((a, b) => new Date(b.departureDate).getTime() - new Date(a.departureDate).getTime());
+      setConvocations(cList);
+    } catch (err) {
+      console.warn("Erreur chargement convocations:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeYear]);
+
   useEffect(() => {
-    const qTeachers = query(collection(db, 'teachers'));
-    const unsubTeachers = onSnapshot(qTeachers, (snapshot) => {
-      const data: {id: string, name: string}[] = [];
-      snapshot.forEach(doc => {
-        data.push({ id: doc.id, name: doc.data().name });
-      });
-      setTeachers(data);
-    });
-    return () => unsubTeachers();
-  }, []);
+    fetchConvocationsData();
+  }, [fetchConvocationsData]);
 
   useEffect(() => {
     if (autoCreateNew) {
@@ -45,20 +52,6 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
       if (onAutoCreateConsumed) onAutoCreateConsumed();
     }
   }, [autoCreateNew, onAutoCreateConsumed]);
-
-  useEffect(() => {
-    const q = query(collection(db, 'convocations'), where('schoolYear', '==', activeYear));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Convocation[] = [];
-      snapshot.forEach(d => {
-        data.push({ id: d.id, ...d.data() } as Convocation);
-      });
-      data.sort((a, b) => new Date(b.departureDate).getTime() - new Date(a.departureDate).getTime());
-      setConvocations(data);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [activeYear]);
 
   const handleCreateNew = () => {
     setActiveConvocation(null);
@@ -91,11 +84,12 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
   const confirmDelete = async () => {
     if (!convToDel) return;
     try {
-      await deleteDoc(doc(db, 'convocations', convToDel));
+      await deleteConvocationApi(convToDel);
       if (activeConvocation?.id === convToDel) {
         setActiveConvocation(null);
         setIsEditing(false);
       }
+      await fetchConvocationsData();
     } catch (err) {
       console.error(err);
     }
@@ -118,26 +112,21 @@ export const ConvocationManager: React.FC<Props> = ({ students, activeYear, auto
         studentIds: Array.from(selectedStudentIds),
         schoolYear: activeYear
       };
-      
-      // Clean undefined values for Firestore
-      Object.keys(dataToSave).forEach(key => {
-        if (dataToSave[key] === undefined) {
-          delete dataToSave[key];
-        }
-      });
 
       if (activeConvocation) {
-        await updateDoc(doc(db, 'convocations', activeConvocation.id), dataToSave);
+        await saveConvocationApi({ ...dataToSave, id: activeConvocation.id });
         if (dataToSave.sessionId) {
-          await updateDoc(doc(db, 'sessions', dataToSave.sessionId), {
+          await saveSessionApi({
+            id: dataToSave.sessionId,
             enrolledStudentIds: dataToSave.studentIds
           });
         }
       } else {
-        await addDoc(collection(db, 'convocations'), dataToSave);
+        await saveConvocationApi(dataToSave);
       }
       setIsEditing(false);
       setActiveConvocation(null);
+      await fetchConvocationsData();
     } catch (err) {
       console.error(err);
       alert("Erreur lors de la sauvegarde.");

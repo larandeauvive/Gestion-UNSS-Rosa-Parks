@@ -2,19 +2,24 @@
 <img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
 </div>
 
-# Run and deploy your AI Studio app
+# AS Rosa Parks - Gestion UNSS (Supabase EU & GitHub Pages)
 
-This contains everything you need to run your app locally.
+Application de gestion sportive scolaire UNSS, conforme au RGPD et au cadre de l'Éducation nationale (hébergement des données en Union Européenne).
 
-View your app in AI Studio: https://ai.studio/apps/8eb51830-f3d8-4b06-8c08-2e06ab5414a3
+## Déploiement & Initialisation Supabase en 3 étapes :
 
-## Run Locally
+1. **Créer les tables dans Supabase** :
+   - Ouvrez votre console Supabase : [SQL Editor Supabase](https://supabase.com/dashboard/project/jgzcznwurnqefcseougm/sql/new)
+   - Copiez-collez l'intégralité du fichier `supabase-schema.sql` et cliquez sur **Run**.
 
-**Prerequisites:**  Node.js
+2. **Migrer les données depuis Firestore vers Supabase** :
+   ```bash
+   npm run migrate:supabase
+   ```
 
+3. **Déployer sur GitHub Pages** :
+   ```bash
+   npm run build:pages
+   ```
+   Publiez ensuite le contenu du dossier `dist` sur votre branche `gh-pages` (ou via GitHub Actions).
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`

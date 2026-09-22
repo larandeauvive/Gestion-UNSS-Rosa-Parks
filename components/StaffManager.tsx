@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Users, UserCheck, UserX, Clock, Calendar, CheckCircle2, XCircle, AlertCircle, 
   Search, Filter, Plus, Edit2, Trash2, Printer, Download, Moon, 
@@ -6,10 +6,10 @@ import {
   CheckSquare, Square, RefreshCw, BarChart2, CalendarDays
 } from 'lucide-react';
 import { 
-  collection, query, where, onSnapshot, addDoc, updateDoc, 
-  deleteDoc, doc, setDoc 
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
+  getStaffMembersList, saveStaffMemberApi, deleteStaffMemberApi,
+  getEveningSlotsList, saveEveningSlotApi, deleteEveningSlotApi,
+  getStaffAttendanceList, saveStaffAttendanceApi
+} from '../lib/db';
 import { StaffMember, EveningSlot, StaffAttendanceRecord } from '../types';
 
 interface Props {
@@ -124,45 +124,22 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
   const [attendanceNotes, setAttendanceNotes] = useState('');
   const [attendanceSaving, setAttendanceSaving] = useState(false);
 
-  // Écoute temps réel des membres du personnel
-  useEffect(() => {
-    const q = query(
-      collection(db, 'staff_members'),
-      where('schoolYear', '==', activeYear)
-    );
-    const unsub = onSnapshot(q, (snapshot) => {
-      const docs: StaffMember[] = [];
-      snapshot.forEach(d => {
-        docs.push({ id: d.id, ...d.data() } as StaffMember);
-      });
-      // Tri alphabétique par Nom
-      docs.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
-      setStaffMembers(docs);
-      setLoading(false);
-    }, (err) => {
-      console.warn("Erreur chargement personnel:", err);
-      setLoading(false);
-    });
-    return () => unsub();
-  }, [activeYear]);
+  const fetchStaffData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [members, fetchedSlots, attendanceList] = await Promise.all([
+        getStaffMembersList(activeYear),
+        getEveningSlotsList(activeYear),
+        getStaffAttendanceList(activeYear)
+      ]);
 
-  // Écoute temps réel des créneaux du soir
-  useEffect(() => {
-    const q = query(
-      collection(db, 'evening_slots'),
-      where('schoolYear', '==', activeYear)
-    );
-    const unsub = onSnapshot(q, async (snapshot) => {
-      const docs: EveningSlot[] = [];
-      snapshot.forEach(d => {
-        docs.push({ id: d.id, ...d.data() } as EveningSlot);
-      });
+      setStaffMembers(members);
 
-      // Si aucun créneau n'existe encore pour l'année, initialiser les 3 créneaux standards
-      if (docs.length === 0 && !snapshot.metadata.fromCache) {
+      // Si aucun créneau n'existe encore pour l'année, initialiser les créneaux par défaut
+      if (fetchedSlots.length === 0) {
         for (const defaultSlot of DEFAULT_SLOTS) {
           try {
-            await addDoc(collection(db, 'evening_slots'), {
+            await saveEveningSlotApi({
               ...defaultSlot,
               schoolYear: activeYear
             });
@@ -170,36 +147,27 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
             console.error("Erreur init slot:", e);
           }
         }
+        const reloadedSlots = await getEveningSlotsList(activeYear);
+        setSlots(reloadedSlots);
+        if (reloadedSlots.length > 0) setSelectedSlotIdForAttendance(reloadedSlots[0].id);
       } else {
-        setSlots(docs);
-        if (!selectedSlotIdForAttendance && docs.length > 0) {
-          setSelectedSlotIdForAttendance(docs[0].id);
+        setSlots(fetchedSlots);
+        if (!selectedSlotIdForAttendance && fetchedSlots.length > 0) {
+          setSelectedSlotIdForAttendance(fetchedSlots[0].id);
         }
       }
-    }, (err) => {
-      console.warn("Erreur chargement créneaux du soir:", err);
-    });
-    return () => unsub();
-  }, [activeYear]);
 
-  // Écoute temps réel des pointages / présences
+      setAttendances(attendanceList);
+    } catch (err) {
+      console.warn("Erreur chargement personnel:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeYear, selectedSlotIdForAttendance]);
+
   useEffect(() => {
-    const q = query(
-      collection(db, 'staff_attendance'),
-      where('schoolYear', '==', activeYear)
-    );
-    const unsub = onSnapshot(q, (snapshot) => {
-      const docs: StaffAttendanceRecord[] = [];
-      snapshot.forEach(d => {
-        docs.push({ id: d.id, ...d.data() } as StaffAttendanceRecord);
-      });
-      docs.sort((a, b) => b.date.localeCompare(a.date));
-      setAttendances(docs);
-    }, (err) => {
-      console.warn("Erreur chargement pointages:", err);
-    });
-    return () => unsub();
-  }, [activeYear]);
+    fetchStaffData();
+  }, [fetchStaffData]);
 
   // Synchronisation du pointage sélectionné en fonction du créneau et de la date
   useEffect(() => {
@@ -347,14 +315,15 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
       };
 
       if (editingMember) {
-        await updateDoc(doc(db, 'staff_members', editingMember.id), dataToSave);
+        await saveStaffMemberApi({ ...dataToSave, id: editingMember.id });
       } else {
-        await addDoc(collection(db, 'staff_members'), {
+        await saveStaffMemberApi({
           ...dataToSave,
           createdAt: new Date().toISOString()
         });
       }
       setIsMemberModalOpen(false);
+      await fetchStaffData();
     } catch (err) {
       console.error("Erreur sauvegarde membre:", err);
       alert("Erreur lors de l'enregistrement.");
@@ -364,7 +333,8 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
   const handleDeleteMember = async (m: StaffMember) => {
     if (!window.confirm(`Supprimer ${m.firstName} ${m.lastName} de la liste du personnel ?`)) return;
     try {
-      await deleteDoc(doc(db, 'staff_members', m.id));
+      await deleteStaffMemberApi(m.id);
+      await fetchStaffData();
     } catch (err) {
       console.error("Erreur suppression:", err);
       alert("Impossible de supprimer ce membre.");
@@ -374,10 +344,12 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
   const handleToggleLicense = async (m: StaffMember) => {
     try {
       const nextState = !m.isLicenseUpToDate;
-      await updateDoc(doc(db, 'staff_members', m.id), {
+      await saveStaffMemberApi({
+        ...m,
         isLicenseUpToDate: nextState,
         updatedAt: new Date().toISOString()
       });
+      await fetchStaffData();
     } catch (err) {
       console.error("Erreur bascule licence:", err);
     }
@@ -386,10 +358,12 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
   const handleTogglePaid = async (m: StaffMember) => {
     try {
       const nextState = !m.paid;
-      await updateDoc(doc(db, 'staff_members', m.id), {
+      await saveStaffMemberApi({
+        ...m,
         paid: nextState,
         updatedAt: new Date().toISOString()
       });
+      await fetchStaffData();
     } catch (err) {
       console.error("Erreur bascule paiement:", err);
     }
@@ -434,11 +408,12 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
 
     try {
       if (editingSlot) {
-        await updateDoc(doc(db, 'evening_slots', editingSlot.id), slotForm);
+        await saveEveningSlotApi({ ...slotForm, id: editingSlot.id });
       } else {
-        await addDoc(collection(db, 'evening_slots'), slotForm);
+        await saveEveningSlotApi(slotForm);
       }
       setIsSlotModalOpen(false);
+      await fetchStaffData();
     } catch (err) {
       console.error("Erreur créneau:", err);
       alert("Erreur lors de l'enregistrement du créneau.");
@@ -448,7 +423,8 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
   const handleDeleteSlot = async (s: EveningSlot) => {
     if (!window.confirm(`Supprimer le créneau "${s.name}" ?`)) return;
     try {
-      await deleteDoc(doc(db, 'evening_slots', s.id));
+      await deleteEveningSlotApi(s.id);
+      await fetchStaffData();
     } catch (err) {
       console.error("Erreur suppression créneau:", err);
     }
@@ -483,23 +459,21 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
     const slot = slots.find(s => s.id === selectedSlotIdForAttendance);
     const slotName = slot ? `${slot.name} (${slot.dayOfWeek} ${slot.startTime}-${slot.endTime})` : 'Créneau du soir';
 
-    const payload: Omit<StaffAttendanceRecord, 'id'> = {
+    const payload: Omit<StaffAttendanceRecord, 'id'> & { id?: string } = {
+      ...(currentAttendanceRecord?.id ? { id: currentAttendanceRecord.id } : {}),
       date: attendanceDate,
       slotId: selectedSlotIdForAttendance,
       slotName,
       schoolYear: activeYear,
       presentStaffIds: Array.from(presentIds),
       notes: attendanceNotes.trim(),
-      createdAt: new Date().toISOString()
+      createdAt: currentAttendanceRecord?.createdAt || new Date().toISOString()
     };
 
     try {
-      if (currentAttendanceRecord) {
-        await updateDoc(doc(db, 'staff_attendance', currentAttendanceRecord.id), payload);
-      } else {
-        await addDoc(collection(db, 'staff_attendance'), payload);
-      }
+      await saveStaffAttendanceApi(payload);
       alert("Pointage des présences enregistré avec succès !");
+      await fetchStaffData();
     } catch (err) {
       console.error("Erreur pointage:", err);
       alert("Impossible d'enregistrer le pointage.");

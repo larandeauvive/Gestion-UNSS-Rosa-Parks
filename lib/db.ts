@@ -1,161 +1,683 @@
-import { collection, doc, addDoc, updateDoc, deleteDoc, writeBatch, setDoc, getDocs } from "firebase/firestore";
-import { db } from "./firebase";
-import { Student, PublicStudent } from "../types";
+import { supabase } from './supabaseClient';
+import { 
+  Student, PublicStudent, Teacher, Convocation, 
+  Session, EveningSlot, StaffMember, StaffAttendanceRecord 
+} from '../types';
+import {
+  rowToStudent, studentToRow,
+  rowToSession, sessionToRow,
+  rowToConvocation, convocationToRow,
+  rowToEveningSlot, eveningSlotToRow,
+  rowToStaffMember, staffMemberToRow,
+  rowToStaffAttendance, staffAttendanceToRow
+} from './supabaseMappers';
 
-export const STUDENTS_COLLECTION = "students";
-export const PUBLIC_DIRECTORY_COLLECTION = "public_students_directory";
+const API_BASE = '/api';
 
-export const addStudent = async (student: Omit<Student, "id">) => {
-  const docRef = await addDoc(collection(db, STUDENTS_COLLECTION), {
+// Fallback helper for API routes if needed (e.g. backup, restore, reset)
+async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('as_auth_token') || 'admin-secret-passkey';
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    ...(options?.headers as Record<string, string> || {})
+  };
+  const res = await fetch(url, { ...options, headers });
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    throw new Error(errorBody.error || `Erreur serveur (${res.status})`);
+  }
+  return res.json();
+}
+
+// ----------------------------------------------------
+// STUDENTS (Direct Supabase client)
+// ----------------------------------------------------
+export const getStudents = async (schoolYear?: string): Promise<Student[]> => {
+  try {
+    let query = supabase.from('students').select('*').order('last_name', { ascending: true });
+    if (schoolYear) {
+      query = query.eq('school_year', schoolYear);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn('Supabase getStudents query error, falling back to API:', error.message);
+      const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+      return fetchJson<Student[]>(`${API_BASE}/students${q}`);
+    }
+    return (data || []).map(rowToStudent);
+  } catch (err) {
+    console.warn('getStudents fallback:', err);
+    const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+    return fetchJson<Student[]>(`${API_BASE}/students${q}`);
+  }
+};
+
+export const getStudentsList = getStudents;
+
+export const getPublicDirectory = async (schoolYear: string): Promise<PublicStudent[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('students')
+      .select('id, last_name, first_name, class_group, school_year, is_adult, license_number, opuss_checked, paid')
+      .eq('school_year', schoolYear)
+      .order('last_name', { ascending: true });
+
+    if (error) {
+      console.warn('Supabase getPublicDirectory error, falling back to API:', error.message);
+      return fetchJson<PublicStudent[]>(`${API_BASE}/public-directory?schoolYear=${encodeURIComponent(schoolYear)}`);
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      lastName: row.last_name ?? '',
+      firstName: row.first_name ?? '',
+      classGroup: row.class_group ?? '',
+      schoolYear: row.school_year ?? '',
+      isAdult: row.is_adult ?? false,
+      hasLicense: !!(row.license_number && row.license_number.trim().length > 0) || row.opuss_checked === true || row.paid === 'OUI'
+    }));
+  } catch {
+    return fetchJson<PublicStudent[]>(`${API_BASE}/public-directory?schoolYear=${encodeURIComponent(schoolYear)}`);
+  }
+};
+
+export const addStudent = async (student: Omit<Student, "id">): Promise<string> => {
+  const newId = crypto.randomUUID();
+  const row = studentToRow({
     ...student,
+    id: newId,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   });
 
-  // Synchronisation du répertoire public (Nom, Prénom, Classe et Statuts pour information élève)
   try {
-    await setDoc(doc(db, PUBLIC_DIRECTORY_COLLECTION, docRef.id), {
-      lastName: student.lastName || '',
-      firstName: student.firstName || '',
-      schoolYear: student.schoolYear || '',
-      classGroup: student.classGroup || '',
-      paid: student.paid || 'NON',
-      parentalAuth: student.parentalAuth || 'NON',
-      swimmingCertificate: student.swimmingCertificate || 'NON',
-      imageRights: student.imageRights || 'NON',
-      licenseNumber: student.licenseNumber || ''
+    const { error } = await supabase.from('students').insert(row);
+    if (error) {
+      console.warn('Supabase addStudent error, falling back to API:', error.message);
+      const res = await fetchJson<{ id: string }>(`${API_BASE}/students`, {
+        method: 'POST',
+        body: JSON.stringify(student)
+      });
+      return res.id;
+    }
+    return newId;
+  } catch {
+    const res = await fetchJson<{ id: string }>(`${API_BASE}/students`, {
+      method: 'POST',
+      body: JSON.stringify(student)
     });
-  } catch (e) {
-    console.error("Erreur sync répertoire public:", e);
+    return res.id;
   }
-
-  return docRef.id;
 };
 
-export const updateStudent = async (id: string, data: Partial<Student>) => {
-  const docRef = doc(db, STUDENTS_COLLECTION, id);
-  await updateDoc(docRef, {
+export const updateStudent = async (id: string, data: Partial<Student>): Promise<void> => {
+  const row = studentToRow({
     ...data,
     updatedAt: new Date().toISOString()
   });
 
-  // Mettre à jour le répertoire public si nom, prénom ou statuts modifiés
-  const publicKeys: (keyof PublicStudent)[] = [
-    'lastName', 'firstName', 'schoolYear', 'classGroup',
-    'paid', 'parentalAuth', 'swimmingCertificate', 'imageRights', 'licenseNumber'
-  ];
-  const publicUpdate: Partial<PublicStudent> = {};
-  let shouldUpdatePublic = false;
-  for (const key of publicKeys) {
-    if (data[key] !== undefined) {
-      (publicUpdate as any)[key] = data[key];
-      shouldUpdatePublic = true;
-    }
-  }
-  if (shouldUpdatePublic) {
-    try {
-      await setDoc(doc(db, PUBLIC_DIRECTORY_COLLECTION, id), publicUpdate, { merge: true });
-    } catch (e) {
-      console.error("Erreur sync répertoire public:", e);
-    }
-  }
-};
-
-export const deleteStudent = async (id: string) => {
-  const docRef = doc(db, STUDENTS_COLLECTION, id);
-  await deleteDoc(docRef);
   try {
-    await deleteDoc(doc(db, PUBLIC_DIRECTORY_COLLECTION, id));
-  } catch (e) {
-    console.error("Erreur suppression répertoire public:", e);
-  }
-};
-
-export const deleteMultipleStudents = async (ids: string[]) => {
-  let batch = writeBatch(db);
-  let count = 0;
-  for (const id of ids) {
-    batch.delete(doc(db, STUDENTS_COLLECTION, id));
-    batch.delete(doc(db, PUBLIC_DIRECTORY_COLLECTION, id));
-    count += 2;
-    if (count % 400 === 0) {
-      await batch.commit();
-      batch = writeBatch(db);
+    const { error } = await supabase.from('students').update(row).eq('id', id);
+    if (error) {
+      console.warn('Supabase updateStudent error, falling back to API:', error.message);
+      await fetchJson(`${API_BASE}/students/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      });
     }
-  }
-  if (count % 400 !== 0) {
-    await batch.commit();
-  }
-};
-
-export const updateMultipleStudents = async (ids: string[], data: Partial<Student>) => {
-  let batch = writeBatch(db);
-  let count = 0;
-  const publicKeys: (keyof PublicStudent)[] = [
-    'lastName', 'firstName', 'schoolYear', 'classGroup',
-    'paid', 'parentalAuth', 'swimmingCertificate', 'imageRights', 'licenseNumber'
-  ];
-  const publicUpdate: Partial<PublicStudent> = {};
-  let hasPublicField = false;
-  for (const key of publicKeys) {
-    if (data[key] !== undefined) {
-      (publicUpdate as any)[key] = data[key];
-      hasPublicField = true;
-    }
-  }
-
-  for (const id of ids) {
-    batch.update(doc(db, STUDENTS_COLLECTION, id), {
-      ...data,
-      updatedAt: new Date().toISOString()
+  } catch {
+    await fetchJson(`${API_BASE}/students/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
     });
-    count++;
-
-    if (hasPublicField) {
-      batch.set(doc(db, PUBLIC_DIRECTORY_COLLECTION, id), publicUpdate, { merge: true });
-      count++;
-    }
-
-    if (count % 400 === 0) {
-      await batch.commit();
-      batch = writeBatch(db);
-    }
   }
-  if (count % 400 !== 0) {
-    await batch.commit();
+};
+
+export const deleteStudent = async (id: string): Promise<void> => {
+  try {
+    const { error } = await supabase.from('students').delete().eq('id', id);
+    if (error) {
+      console.warn('Supabase deleteStudent error, falling back to API:', error.message);
+      await fetchJson(`${API_BASE}/students/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      });
+    }
+  } catch {
+    await fetchJson(`${API_BASE}/students/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  }
+};
+
+export const deleteMultipleStudents = async (ids: string[]): Promise<void> => {
+  if (!ids || ids.length === 0) return;
+  try {
+    const { error } = await supabase.from('students').delete().in('id', ids);
+    if (error) {
+      console.warn('Supabase deleteMultipleStudents error, falling back to API:', error.message);
+      await fetchJson(`${API_BASE}/students/batch-delete`, {
+        method: 'POST',
+        body: JSON.stringify({ ids })
+      });
+    }
+  } catch {
+    await fetchJson(`${API_BASE}/students/batch-delete`, {
+      method: 'POST',
+      body: JSON.stringify({ ids })
+    });
+  }
+};
+
+export const updateMultipleStudents = async (ids: string[], data: Partial<Student>): Promise<void> => {
+  if (!ids || ids.length === 0) return;
+  const row = studentToRow({
+    ...data,
+    updatedAt: new Date().toISOString()
+  });
+
+  try {
+    const { error } = await supabase.from('students').update(row).in('id', ids);
+    if (error) {
+      console.warn('Supabase updateMultipleStudents error, falling back to API:', error.message);
+      await fetchJson(`${API_BASE}/students/batch-update`, {
+        method: 'POST',
+        body: JSON.stringify({ ids, data })
+      });
+    }
+  } catch {
+    await fetchJson(`${API_BASE}/students/batch-update`, {
+      method: 'POST',
+      body: JSON.stringify({ ids, data })
+    });
+  }
+};
+
+export const batchUpsertStudentsApi = async (students: Partial<Student>[], schoolYear: string): Promise<number> => {
+  if (!students || students.length === 0) return 0;
+  
+  const now = new Date().toISOString();
+  const rows = students.map(s => {
+    const r = studentToRow({
+      ...s,
+      schoolYear: s.schoolYear || schoolYear,
+      updatedAt: now,
+      createdAt: s.createdAt || now
+    });
+    if (!r.id) r.id = crypto.randomUUID();
+    return r;
+  });
+
+  try {
+    const { error } = await supabase.from('students').upsert(rows);
+    if (error) {
+      console.warn('Supabase batchUpsert error, falling back to API:', error.message);
+      const res = await fetchJson<{ success: boolean; count: number }>(`${API_BASE}/students/batch-upsert`, {
+        method: 'POST',
+        body: JSON.stringify({ students, schoolYear })
+      });
+      return res.count;
+    }
+    return rows.length;
+  } catch {
+    const res = await fetchJson<{ success: boolean; count: number }>(`${API_BASE}/students/batch-upsert`, {
+      method: 'POST',
+      body: JSON.stringify({ students, schoolYear })
+    });
+    return res.count;
+  }
+};
+
+export const syncAllToPublicDirectory = async (_studentsList: Student[]): Promise<void> => {
+  return;
+};
+
+// ----------------------------------------------------
+// TEACHERS
+// ----------------------------------------------------
+export const getTeachersList = async (): Promise<Teacher[]> => {
+  try {
+    const { data, error } = await supabase.from('teachers').select('*').order('name', { ascending: true });
+    if (error) throw error;
+    return (data || []).map((r: any) => ({ id: r.id, name: r.name }));
+  } catch {
+    return fetchJson<Teacher[]>(`${API_BASE}/teachers`);
+  }
+};
+
+export const addTeacherApi = async (name: string): Promise<string> => {
+  const newId = crypto.randomUUID();
+  try {
+    const { error } = await supabase.from('teachers').insert({ id: newId, name });
+    if (error) throw error;
+    return newId;
+  } catch {
+    const res = await fetchJson<{ id: string }>(`${API_BASE}/teachers`, {
+      method: 'POST',
+      body: JSON.stringify({ name })
+    });
+    return res.id;
+  }
+};
+
+export const updateTeacherApi = async (id: string, name: string): Promise<void> => {
+  try {
+    const { error } = await supabase.from('teachers').update({ name }).eq('id', id);
+    if (error) throw error;
+  } catch {
+    await fetchJson(`${API_BASE}/teachers/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name })
+    });
+  }
+};
+
+export const deleteTeacherApi = async (id: string): Promise<void> => {
+  try {
+    const { error } = await supabase.from('teachers').delete().eq('id', id);
+    if (error) throw error;
+  } catch {
+    await fetchJson(`${API_BASE}/teachers/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  }
+};
+
+// ----------------------------------------------------
+// SESSIONS & CRÉNEAUX D'ACTIVITÉS (Supabase client direct)
+// ----------------------------------------------------
+export const getSessionsList = async (schoolYear?: string): Promise<Session[]> => {
+  try {
+    let query = supabase.from('sessions').select('*').order('date', { ascending: false });
+    if (schoolYear) {
+      query = query.eq('school_year', schoolYear);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn('Supabase getSessionsList error, falling back to API:', error.message);
+      const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+      return fetchJson<Session[]>(`${API_BASE}/sessions${q}`);
+    }
+    return (data || []).map(rowToSession);
+  } catch {
+    const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+    return fetchJson<Session[]>(`${API_BASE}/sessions${q}`);
+  }
+};
+
+export const getSession = async (id: string): Promise<Session> => {
+  try {
+    const { data, error } = await supabase.from('sessions').select('*').eq('id', id).single();
+    if (error || !data) throw error || new Error('Séance introuvable');
+    return rowToSession(data);
+  } catch {
+    return fetchJson<Session>(`${API_BASE}/sessions/${encodeURIComponent(id)}`);
+  }
+};
+
+export const addSessionApi = async (data: Omit<Session, 'id'>): Promise<string> => {
+  const newId = crypto.randomUUID();
+  const row = sessionToRow({
+    ...data,
+    id: newId
+  });
+
+  try {
+    const { error } = await supabase.from('sessions').insert(row);
+    if (error) throw error;
+    return newId;
+  } catch {
+    const res = await fetchJson<{ id: string }>(`${API_BASE}/sessions`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    return res.id;
+  }
+};
+
+export const updateSessionApi = async (id: string, data: Partial<Session>): Promise<void> => {
+  const row = sessionToRow(data);
+  try {
+    const { error } = await supabase.from('sessions').update(row).eq('id', id);
+    if (error) throw error;
+  } catch {
+    await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+};
+
+export const saveSessionApi = async (data: Partial<Session> & { id?: string }): Promise<{ id: string }> => {
+  if (data.id) {
+    const { id, ...rest } = data;
+    await updateSessionApi(id, rest);
+    return { id };
+  } else {
+    const newId = await addSessionApi(data as Omit<Session, 'id'>);
+    return { id: newId };
+  }
+};
+
+export const deleteSessionApi = async (id: string): Promise<void> => {
+  try {
+    const { error } = await supabase.from('sessions').delete().eq('id', id);
+    if (error) throw error;
+  } catch {
+    await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
   }
 };
 
 /**
- * Fonction de synchronisation globale assurant que chaque élève dispose de sa projection publique avec statuts
+ * Réservation d'un créneau / séance d'activité avec Supabase
  */
-export const syncAllToPublicDirectory = async (studentsList: Student[]) => {
-  if (!studentsList || studentsList.length === 0) return;
-  let batch = writeBatch(db);
-  let count = 0;
-  for (const s of studentsList) {
-    if (!s.id) continue;
-    batch.set(doc(db, PUBLIC_DIRECTORY_COLLECTION, s.id), {
-      lastName: s.lastName || '',
-      firstName: s.firstName || '',
-      schoolYear: s.schoolYear || '',
-      classGroup: s.classGroup || '',
-      paid: s.paid || 'NON',
-      parentalAuth: s.parentalAuth || 'NON',
-      swimmingCertificate: s.swimmingCertificate || 'NON',
-      imageRights: s.imageRights || 'NON',
-      licenseNumber: s.licenseNumber || ''
-    });
-    count++;
-    if (count % 400 === 0) {
-      await batch.commit();
-      batch = writeBatch(db);
+export const enrollInSession = async (sessionId: string, studentId: string): Promise<void> => {
+  try {
+    // 1. Lire la séance courante
+    const { data: currentSession, error: fetchErr } = await supabase
+      .from('sessions')
+      .select('enrolled_student_ids, max_participants')
+      .eq('id', sessionId)
+      .single();
+
+    if (fetchErr) throw fetchErr;
+
+    const enrolledList: string[] = currentSession?.enrolled_student_ids || [];
+    if (!enrolledList.includes(studentId)) {
+      if (currentSession?.max_participants && enrolledList.length >= currentSession.max_participants) {
+        throw new Error('La séance est complète.');
+      }
+      enrolledList.push(studentId);
+
+      const { error: updateErr } = await supabase
+        .from('sessions')
+        .update({ enrolled_student_ids: enrolledList })
+        .eq('id', sessionId);
+
+      if (updateErr) throw updateErr;
     }
-  }
-  if (count % 400 !== 0) {
-    await batch.commit();
+  } catch (err) {
+    console.warn('Supabase enrollInSession fallback to API:', err);
+    await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(sessionId)}/enroll`, {
+      method: 'POST',
+      body: JSON.stringify({ studentId })
+    });
   }
 };
 
+// ----------------------------------------------------
+// CONVOCATIONS
+// ----------------------------------------------------
+export const getConvocationsList = async (schoolYear?: string): Promise<Convocation[]> => {
+  try {
+    let query = supabase.from('convocations').select('*').order('departure_date', { ascending: false });
+    if (schoolYear) {
+      query = query.eq('school_year', schoolYear);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map(rowToConvocation);
+  } catch {
+    const query = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+    return fetchJson<Convocation[]>(`${API_BASE}/convocations${query}`);
+  }
+};
 
+export const addConvocationApi = async (data: Omit<Convocation, 'id'>): Promise<string> => {
+  const newId = crypto.randomUUID();
+  const row = convocationToRow({ ...data, id: newId });
+  try {
+    const { error } = await supabase.from('convocations').insert(row);
+    if (error) throw error;
+    return newId;
+  } catch {
+    const res = await fetchJson<{ id: string }>(`${API_BASE}/convocations`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    return res.id;
+  }
+};
 
+export const updateConvocationApi = async (id: string, data: Partial<Convocation>): Promise<void> => {
+  const row = convocationToRow(data);
+  try {
+    const { error } = await supabase.from('convocations').update(row).eq('id', id);
+    if (error) throw error;
+  } catch {
+    await fetchJson(`${API_BASE}/convocations/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+};
+
+export const saveConvocationApi = async (data: Partial<Convocation> & { id?: string }): Promise<{ id: string }> => {
+  if (data.id) {
+    const { id, ...rest } = data;
+    await updateConvocationApi(id, rest);
+    return { id };
+  } else {
+    const newId = await addConvocationApi(data as Omit<Convocation, 'id'>);
+    return { id: newId };
+  }
+};
+
+export const deleteConvocationApi = async (id: string): Promise<void> => {
+  try {
+    const { error } = await supabase.from('convocations').delete().eq('id', id);
+    if (error) throw error;
+  } catch {
+    await fetchJson(`${API_BASE}/convocations/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  }
+};
+
+// ----------------------------------------------------
+// STAFF & EVENING SLOTS
+// ----------------------------------------------------
+export const getEveningSlotsList = async (schoolYear?: string): Promise<EveningSlot[]> => {
+  try {
+    let query = supabase.from('evening_slots').select('*');
+    if (schoolYear) query = query.eq('school_year', schoolYear);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map(rowToEveningSlot);
+  } catch {
+    const query = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+    return fetchJson<EveningSlot[]>(`${API_BASE}/evening-slots${query}`);
+  }
+};
+
+export const saveEveningSlotApi = async (slot: Omit<EveningSlot, 'id'> & { id?: string }): Promise<string> => {
+  const newId = slot.id || crypto.randomUUID();
+  const row = eveningSlotToRow({ ...slot, id: newId });
+  try {
+    const { error } = await supabase.from('evening_slots').upsert(row);
+    if (error) throw error;
+    return newId;
+  } catch {
+    const res = await fetchJson<{ id: string }>(`${API_BASE}/evening-slots`, {
+      method: 'POST',
+      body: JSON.stringify(slot)
+    });
+    return res.id;
+  }
+};
+
+export const deleteEveningSlotApi = async (id: string): Promise<void> => {
+  try {
+    const { error } = await supabase.from('evening_slots').delete().eq('id', id);
+    if (error) throw error;
+  } catch {
+    await fetchJson(`${API_BASE}/evening-slots/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  }
+};
+
+export const getStaffMembersList = async (schoolYear?: string): Promise<StaffMember[]> => {
+  try {
+    let query = supabase.from('staff_members').select('*');
+    if (schoolYear) query = query.eq('school_year', schoolYear);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map(rowToStaffMember);
+  } catch {
+    const query = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+    return fetchJson<StaffMember[]>(`${API_BASE}/staff-members${query}`);
+  }
+};
+
+export const saveStaffMemberApi = async (data: Omit<StaffMember, 'id'> & { id?: string }): Promise<string> => {
+  const newId = data.id || crypto.randomUUID();
+  const now = new Date().toISOString();
+  const row = staffMemberToRow({
+    ...data,
+    id: newId,
+    updatedAt: now,
+    createdAt: data.createdAt || now
+  });
+
+  try {
+    const { error } = await supabase.from('staff_members').upsert(row);
+    if (error) throw error;
+    return newId;
+  } catch {
+    const res = await fetchJson<{ id: string }>(`${API_BASE}/staff-members`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    return res.id;
+  }
+};
+
+export const deleteStaffMemberApi = async (id: string): Promise<void> => {
+  try {
+    const { error } = await supabase.from('staff_members').delete().eq('id', id);
+    if (error) throw error;
+  } catch {
+    await fetchJson(`${API_BASE}/staff-members/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  }
+};
+
+export const getStaffAttendanceList = async (schoolYear?: string): Promise<StaffAttendanceRecord[]> => {
+  try {
+    let query = supabase.from('staff_attendance').select('*').order('date', { ascending: false });
+    if (schoolYear) query = query.eq('school_year', schoolYear);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map(rowToStaffAttendance);
+  } catch {
+    const query = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+    return fetchJson<StaffAttendanceRecord[]>(`${API_BASE}/staff-attendance${query}`);
+  }
+};
+
+export const saveStaffAttendanceApi = async (record: Omit<StaffAttendanceRecord, 'id'> & { id?: string }): Promise<string> => {
+  const newId = record.id || crypto.randomUUID();
+  const row = staffAttendanceToRow({
+    ...record,
+    id: newId,
+    createdAt: record.createdAt || new Date().toISOString()
+  });
+
+  try {
+    const { error } = await supabase.from('staff_attendance').upsert(row);
+    if (error) throw error;
+    return newId;
+  } catch {
+    const res = await fetchJson<{ id: string }>(`${API_BASE}/staff-attendance`, {
+      method: 'POST',
+      body: JSON.stringify(record)
+    });
+    return res.id;
+  }
+};
+
+export const deleteStaffAttendanceApi = async (id: string): Promise<void> => {
+  try {
+    const { error } = await supabase.from('staff_attendance').delete().eq('id', id);
+    if (error) throw error;
+  } catch {
+    await fetchJson(`${API_BASE}/staff-attendance/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  }
+};
+
+// ----------------------------------------------------
+// SETTINGS & REGISTRATION FORM (Supabase app_settings)
+// ----------------------------------------------------
+export const getAppSetting = async <T = any>(key: string, defaultValue: T): Promise<T> => {
+  try {
+    const { data, error } = await supabase.from('app_settings').select('value').eq('key', key).single();
+    if (error || !data) return defaultValue;
+    try {
+      return JSON.parse(data.value);
+    } catch {
+      return data.value as unknown as T;
+    }
+  } catch {
+    try {
+      const res = await fetchJson<T>(`${API_BASE}/settings/${encodeURIComponent(key)}`);
+      return res !== null && res !== undefined ? res : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  }
+};
+
+export const saveAppSetting = async <T = any>(key: string, value: T): Promise<void> => {
+  const strValue = typeof value === 'string' ? value : JSON.stringify(value);
+  try {
+    const { error } = await supabase.from('app_settings').upsert({
+      key,
+      value: strValue,
+      updated_at: new Date().toISOString()
+    });
+    if (error) throw error;
+  } catch {
+    await fetchJson(`${API_BASE}/settings/${encodeURIComponent(key)}`, {
+      method: 'POST',
+      body: JSON.stringify(value)
+    });
+  }
+};
+
+export const deleteAppSetting = async (key: string): Promise<void> => {
+  try {
+    const { error } = await supabase.from('app_settings').delete().eq('key', key);
+    if (error) throw error;
+  } catch {
+    await fetchJson(`${API_BASE}/settings/${encodeURIComponent(key)}`, {
+      method: 'DELETE'
+    });
+  }
+};
+
+// ----------------------------------------------------
+// BACKUP & RESET
+// ----------------------------------------------------
+export const fetchBackup = async (): Promise<Record<string, any[]>> => {
+  return fetchJson<Record<string, any[]>>(`${API_BASE}/backup`);
+};
+
+export const restoreBackup = async (data: Record<string, any[]>): Promise<void> => {
+  await fetchJson(`${API_BASE}/restore`, {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+};
+
+export const resetDatabaseApi = async (type: 'calendar' | 'all'): Promise<void> => {
+  await fetchJson(`${API_BASE}/reset`, {
+    method: 'POST',
+    body: JSON.stringify({ type })
+  });
+};

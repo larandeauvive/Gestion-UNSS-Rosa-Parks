@@ -1,5 +1,4 @@
-import { updateDoc, doc, deleteDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { updateStudent, deleteStudent } from '../lib/db';
 import React, { useState, useEffect } from 'react';
 import { Student } from '../types';
 import { X, Save, FileEdit, Trash2 } from 'lucide-react';
@@ -34,259 +33,268 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
     e.preventDefault();
     setIsSaving(true);
     try {
-      const docRef = doc(db, 'students', student.id);
-      await updateDoc(docRef, {
+      await updateStudent(student.id, {
         paid: formData.paid || 'NON',
         paymentMethod: formData.paymentMethod || '',
-        amount: formData.amount || '',
         checkNumber: formData.checkNumber || '',
-        tshirt: formData.tshirt || 'NON',
-        size: formData.size || '',
-        swimmingCertificate: formData.swimmingCertificate || 'NON',
+        amount: formData.amount || '',
         parentalAuth: formData.parentalAuth || 'NON',
         imageRights: formData.imageRights || 'NON',
-        gender: formData.gender || '',
+        swimmingCertificate: formData.swimmingCertificate || 'NON',
+        tshirt: formData.tshirt || 'NON',
+        size: formData.size || '',
+        licenseNumber: formData.licenseNumber || '',
+        classGroup: formData.classGroup || '',
+        birthDate: formData.birthDate || '',
+        opussChecked: formData.opussChecked || false
       });
       onSuccess();
       onClose();
-    } catch (e) {
-      console.error(e);
-      alert('Erreur lors de la mise à jour.');
+    } catch (err) {
+      console.error(err);
+      alert('Erreur lors de la mise à jour');
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
   };
 
   const handleDelete = async () => {
-    if (!student) return;
-    setShowConfirmDel(true);
-  };
-
-  const confirmDelete = async () => {
-    if (!student) return;
     setIsSaving(true);
     try {
-      const docRef = doc(db, 'students', student.id);
-      await deleteDoc(docRef);
+      await deleteStudent(student.id);
       onSuccess();
       onClose();
-    } catch (e) {
-      console.error(e);
-      alert('Erreur lors de la suppression.');
+    } catch (err) {
+      console.error(err);
+      alert('Erreur lors de la suppression');
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
-    setShowConfirmDel(false);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl flex flex-col my-auto animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between p-6 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-             <div className="w-10 h-10 bg-slate-100 text-slate-700 rounded-lg flex items-center justify-center">
+    <>
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
                 <FileEdit className="w-5 h-5" />
-             </div>
-             <div>
-                <h2 className="text-xl font-bold text-slate-900">{student.firstName} {student.lastName}</h2>
-                <p className="text-sm font-medium text-slate-500">Edition du profil • {student.classGroup}</p>
-             </div>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800">
+                  {student.lastName} {student.firstName}
+                </h3>
+                <p className="text-xs text-slate-400 font-medium">{student.classGroup} &bull; {student.schoolYear}</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Classe
+                </label>
+                <input
+                  type="text"
+                  value={formData.classGroup || ''}
+                  onChange={(e) => setFormData({ ...formData, classGroup: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  N° Licence
+                </label>
+                <input
+                  type="text"
+                  value={formData.licenseNumber || ''}
+                  onChange={(e) => setFormData({ ...formData, licenseNumber: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Payé (€)
+                </label>
+                <select
+                  value={formData.paid || 'NON'}
+                  onChange={(e) => setFormData({ ...formData, paid: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="OUI">OUI</option>
+                  <option value="NON">NON</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Montant
+                </label>
+                <input
+                  type="text"
+                  value={formData.amount || ''}
+                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  placeholder="Ex: 20"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Mode
+                </label>
+                <select
+                  value={formData.paymentMethod || ''}
+                  onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">--</option>
+                  <option value="Espèces">Espèces</option>
+                  <option value="Chèque">Chèque</option>
+                  <option value="Pass'Sport">Pass'Sport</option>
+                  <option value="Autre">Autre</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Aut. Parentale
+                </label>
+                <select
+                  value={formData.parentalAuth || 'NON'}
+                  onChange={(e) => setFormData({ ...formData, parentalAuth: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="OUI">OUI</option>
+                  <option value="NON">NON</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Droit à l'image
+                </label>
+                <select
+                  value={formData.imageRights || 'NON'}
+                  onChange={(e) => setFormData({ ...formData, imageRights: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="OUI">OUI</option>
+                  <option value="NON">NON</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Savoir Nager
+                </label>
+                <select
+                  value={formData.swimmingCertificate || 'NON'}
+                  onChange={(e) => setFormData({ ...formData, swimmingCertificate: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="OUI">OUI</option>
+                  <option value="NON">NON</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  T-shirt
+                </label>
+                <select
+                  value={formData.tshirt || 'NON'}
+                  onChange={(e) => setFormData({ ...formData, tshirt: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="OUI">OUI</option>
+                  <option value="NON">NON</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Taille
+                </label>
+                <input
+                  type="text"
+                  value={formData.size || ''}
+                  onChange={(e) => setFormData({ ...formData, size: e.target.value })}
+                  placeholder="Ex: M, L, 14 ans"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <input
+                type="checkbox"
+                id="opussChecked"
+                checked={!!formData.opussChecked}
+                onChange={(e) => setFormData({ ...formData, opussChecked: e.target.checked })}
+                className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+              />
+              <label htmlFor="opussChecked" className="text-sm font-medium text-slate-700">
+                Saisi / Validé sur OPUSS
+              </label>
+            </div>
+
+            <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowConfirmDel(true)}
+                disabled={isSaving}
+                className="flex items-center gap-1.5 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" /> Supprimer
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={isSaving}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-semibold transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-md shadow-indigo-100 transition-all disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" /> Enregistrer
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
-
-        <form onSubmit={handleSubmit} className="p-6">
-           <div className="space-y-6">
-
-              {/* Profil Info */}
-              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
-                 <h3 className="font-bold text-slate-900 mb-4 text-sm uppercase tracking-wider">Profil</h3>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Sexe</label>
-                      <select 
-                        value={formData.gender || ''}
-                        onChange={e => setFormData({...formData, gender: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium bg-white"
-                      >
-                        <option value="">Non renseigné</option>
-                        <option value="F">Fille (F)</option>
-                        <option value="G">Garçon (G)</option>
-                      </select>
-                    </div>
-                 </div>
-              </div>
-              
-              {/* Payment Info */}
-              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
-                 <h3 className="font-bold text-slate-900 mb-4 text-sm uppercase tracking-wider">Paiement</h3>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">A payé ?</label>
-                      <select 
-                        value={formData.paid || 'NON'}
-                        onChange={e => setFormData({...formData, paid: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium bg-white"
-                      >
-                        <option value="OUI">OUI</option>
-                        <option value="NON">NON</option>
-                      </select>
-                    </div>
-                    {formData.paid === 'OUI' && (
-                      <>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">Montant</label>
-                          <input 
-                            type="text" 
-                            placeholder="ex: 15€"
-                            value={formData.amount || ''}
-                            onChange={e => setFormData({...formData, amount: e.target.value})}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">Mode</label>
-                          <select 
-                            value={formData.paymentMethod || ''}
-                            onChange={e => setFormData({...formData, paymentMethod: e.target.value})}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium bg-white"
-                          >
-                            <option value="">Sélectionner</option>
-                            <option value="Espèces">Espèces</option>
-                            <option value="Chèque">Chèque</option>
-                            <option value="Pass'Sport">Pass'Sport</option>
-                            <option value="Autre">Autre</option>
-                          </select>
-                        </div>
-                        {formData.paymentMethod === 'Chèque' && (
-                          <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">N° Chèque</label>
-                            <input 
-                              type="text" 
-                              placeholder="Numéro"
-                              value={formData.checkNumber || ''}
-                              onChange={e => setFormData({...formData, checkNumber: e.target.value})}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium"
-                            />
-                          </div>
-                        )}
-                      </>
-                    )}
-                 </div>
-              </div>
-
-              {/* T-Shirt */}
-              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
-                 <h3 className="font-bold text-slate-900 mb-4 text-sm uppercase tracking-wider">Maillot UNSS</h3>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Prend un maillot ?</label>
-                      <select 
-                        value={formData.tshirt || 'NON'}
-                        onChange={e => setFormData({...formData, tshirt: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium bg-white"
-                      >
-                        <option value="OUI">OUI</option>
-                        <option value="NON">NON</option>
-                      </select>
-                    </div>
-                    {formData.tshirt === 'OUI' && (
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 mb-1">Taille Maillot</label>
-                        <select 
-                          value={formData.size || ''}
-                          onChange={e => setFormData({...formData, size: e.target.value})}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium bg-white"
-                        >
-                          <option value="">Sélectionner</option>
-                          <option value="S">S</option>
-                          <option value="M">M</option>
-                          <option value="L">L</option>
-                          <option value="XL">XL</option>
-                        </select>
-                      </div>
-                    )}
-                 </div>
-              </div>
-
-              {/* Admin Info / Authorizations */}
-              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
-                 <h3 className="font-bold text-slate-900 mb-4 text-sm uppercase tracking-wider">Autorisations & Documents</h3>
-                 <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Savoir Nager</label>
-                      <select 
-                        value={formData.swimmingCertificate || 'NON'}
-                        onChange={e => setFormData({...formData, swimmingCertificate: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium bg-white"
-                      >
-                        <option value="OUI">OUI</option>
-                        <option value="NON">NON</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Autorisation Parentale</label>
-                      <select 
-                        value={formData.parentalAuth || 'NON'}
-                        onChange={e => setFormData({...formData, parentalAuth: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium bg-white"
-                      >
-                        <option value="OUI">OUI</option>
-                        <option value="NON">NON</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Droit à l'image</label>
-                      <select 
-                        value={formData.imageRights || 'NON'}
-                        onChange={e => setFormData({...formData, imageRights: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium bg-white"
-                      >
-                        <option value="OUI">OUI</option>
-                        <option value="NON">NON</option>
-                      </select>
-                    </div>
-                 </div>
-              </div>
-           </div>
-
-           <div className="flex justify-between gap-3 pt-6 mt-6 border-t border-slate-100">
-             <button
-               type="button"
-               onClick={handleDelete}
-               className="flex items-center gap-2 px-5 py-2.5 text-rose-600 font-medium hover:bg-rose-50 rounded-xl transition-colors"
-               disabled={isSaving}
-             >
-               <Trash2 className="w-4 h-4" /> Supprimer
-             </button>
-             <div className="flex gap-3">
-               <button
-                 type="button"
-                 onClick={onClose}
-                 className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors"
-                 disabled={isSaving}
-               >
-                 Annuler
-               </button>
-               <button
-                 type="submit"
-                 disabled={isSaving}
-                 className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white font-medium hover:bg-slate-800 rounded-xl transition-all disabled:opacity-50"
-               >
-                 {isSaving ? 'Enregistrement...' : <><Save className="w-4 h-4" /> Enregistrer</>}
-               </button>
-             </div>
-           </div>
-        </form>
       </div>
 
-      <ConfirmDialog 
+      <ConfirmDialog
         isOpen={showConfirmDel}
         title="Supprimer l'élève"
-        message="Êtes-vous sûr de vouloir supprimer cet élève ? Cette action est irréversible."
-        onConfirm={confirmDelete}
+        message={`Êtes-vous sûr de vouloir supprimer définitivement ${student.firstName} ${student.lastName} de la base de données ?`}
+        confirmLabel="Supprimer"
+        onConfirm={handleDelete}
         onCancel={() => setShowConfirmDel(false)}
       />
-    </div>
+    </>
   );
 };

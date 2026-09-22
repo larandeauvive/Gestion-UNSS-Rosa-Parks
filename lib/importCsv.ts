@@ -1,7 +1,6 @@
-import { collection, doc, writeBatch } from "firebase/firestore";
 import Papa from "papaparse";
-import { db } from "./firebase";
 import { Student } from "../types";
+import { batchUpsertStudentsApi } from "./db";
 
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRr0ZrIyv9ug3eRGj0iTrbJj9J0rBuJy5UiPkAvF0W_8-mKx8eU33gjc3FXzbxWmIh1iiqTR5yaRCga/pub?output=csv';
 
@@ -19,9 +18,9 @@ export async function importFromCSV(schoolYear: string): Promise<number> {
             return String(val).trim();
           };
 
-          const mappedData = results.data
+          const mappedData: Partial<Student>[] = results.data
             .filter((row: any) => row['Nom'] && String(row['Nom']).trim() !== '')
-            .map((row: any): Omit<Student, 'id'> => ({
+            .map((row: any) => ({
               lastName: forceString(row['Nom']).toUpperCase(),
               firstName: forceString(row['Prénom']),
               classGroup: forceString(row['Classe']).toUpperCase(),
@@ -36,36 +35,8 @@ export async function importFromCSV(schoolYear: string): Promise<number> {
               size: forceString(row['Taille'])
             }));
 
-          let batch = writeBatch(db);
-          let count = 0;
-          
-          for (const student of mappedData) {
-            const docRef = doc(collection(db, "students"));
-            batch.set(docRef, student);
-            // Synchronisation répertoire public (RGPD avec statuts informatifs)
-            const publicRef = doc(db, "public_students_directory", docRef.id);
-            batch.set(publicRef, {
-              lastName: student.lastName || '',
-              firstName: student.firstName || '',
-              schoolYear: student.schoolYear || schoolYear,
-              classGroup: student.classGroup || '',
-              paid: student.paid || 'NON',
-              parentalAuth: student.parentalAuth || 'NON',
-              swimmingCertificate: student.swimmingCertificate || 'NON',
-              imageRights: student.imageRights || 'NON',
-              licenseNumber: student.licenseNumber || ''
-            });
-            count += 2;
-            
-            if (count % 400 === 0) {
-              await batch.commit();
-              batch = writeBatch(db);
-            }
-          }
-          if (count % 400 !== 0) {
-            await batch.commit();
-          }
-          resolve(mappedData.length);
+          const insertedCount = await batchUpsertStudentsApi(mappedData, schoolYear);
+          resolve(insertedCount || mappedData.length);
         } catch (err) {
           reject(err);
         }

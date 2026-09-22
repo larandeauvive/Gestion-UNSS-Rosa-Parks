@@ -1,8 +1,7 @@
-import { doc, writeBatch } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import React, { useState, useEffect } from 'react';
 import { Student } from '../types';
 import { X, ChevronRight, Loader2, Play } from 'lucide-react';
+import { updateStudent } from '../lib/db';
 
 interface Props {
   isOpen: boolean;
@@ -38,13 +37,8 @@ export const YearRolloverWizard: React.FC<Props> = ({ isOpen, onClose, students,
   const handleApply = async () => {
     setIsSaving(true);
     try {
-      let batch = writeBatch(db);
-      let count = 0;
-      
       for (const student of students) {
-        const docRef = doc(db, "students", student.id);
-        
-        batch.update(docRef, {
+        await updateStudent(student.id, {
           schoolYear: targetYear,
           classGroup: classMappings[student.classGroup] || student.classGroup || '',
           licenseNumber: '',
@@ -58,17 +52,6 @@ export const YearRolloverWizard: React.FC<Props> = ({ isOpen, onClose, students,
           parentalAuth: 'NON',
           imageRights: 'NON'
         });
-        
-        count++;
-        
-        if (count % 499 === 0) {
-          await batch.commit();
-          batch = writeBatch(db);
-        }
-      }
-      
-      if (count % 499 !== 0) {
-        await batch.commit();
       }
       
       onComplete();

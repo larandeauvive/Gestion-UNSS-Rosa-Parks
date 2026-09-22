@@ -1,10 +1,9 @@
-import { collection, doc, writeBatch } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { Upload, X, Check, FileSpreadsheet, Loader2, Play, Users, ArrowRight } from 'lucide-react';
 import { Student } from '../types';
 import { formatDateFr } from '../lib/utils';
+import { batchUpsertStudentsApi, deleteMultipleStudents, updateStudent } from '../lib/db';
 
 interface ImportWizardProps {
   isOpen: boolean;
@@ -295,73 +294,16 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
   const handleSaveAdd = async () => {
     setIsProcessing(true);
     try {
-      let batch = writeBatch(db);
-      let count = 0;
-      
       const recordsToImport = importRecords.filter(r => r.selected).map(r => r.student);
       const recordsToDelete = missingStudents.filter(r => r.selected).map(r => r.student);
 
-      for (const student of recordsToImport) {
-        let docRef;
-        const dataToSave = { ...student };
-        
-        if (dataToSave.id) {
-          const id = dataToSave.id;
-          delete (dataToSave as any).id;
-          docRef = doc(db, "students", id);
-          batch.update(docRef, dataToSave as any);
-          batch.set(doc(db, "public_students_directory", id), {
-            lastName: (dataToSave as any).lastName || '',
-            firstName: (dataToSave as any).firstName || '',
-            schoolYear: (dataToSave as any).schoolYear || activeYear,
-            classGroup: (dataToSave as any).classGroup || '',
-            paid: (dataToSave as any).paid || 'NON',
-            parentalAuth: (dataToSave as any).parentalAuth || 'NON',
-            swimmingCertificate: (dataToSave as any).swimmingCertificate || 'NON',
-            imageRights: (dataToSave as any).imageRights || 'NON',
-            licenseNumber: (dataToSave as any).licenseNumber || ''
-          }, { merge: true });
-        } else {
-          docRef = doc(collection(db, "students"));
-          batch.set(docRef, dataToSave);
-          batch.set(doc(db, "public_students_directory", docRef.id), {
-            lastName: (dataToSave as any).lastName || '',
-            firstName: (dataToSave as any).firstName || '',
-            schoolYear: (dataToSave as any).schoolYear || activeYear,
-            classGroup: (dataToSave as any).classGroup || '',
-            paid: (dataToSave as any).paid || 'NON',
-            parentalAuth: (dataToSave as any).parentalAuth || 'NON',
-            swimmingCertificate: (dataToSave as any).swimmingCertificate || 'NON',
-            imageRights: (dataToSave as any).imageRights || 'NON',
-            licenseNumber: (dataToSave as any).licenseNumber || ''
-          });
-        }
-        
-        count += 2;
-        
-        if (count >= 400) {
-          await batch.commit();
-          batch = writeBatch(db);
-          count = 0;
-        }
+      if (recordsToImport.length > 0) {
+        await batchUpsertStudentsApi(recordsToImport, activeYear);
       }
 
-      for (const student of recordsToDelete) {
-        if (!student.id) continue;
-        const docRef = doc(db, "students", student.id);
-        batch.delete(docRef);
-        batch.delete(doc(db, "public_students_directory", student.id));
-        count += 2;
-        
-        if (count >= 400) {
-          await batch.commit();
-          batch = writeBatch(db);
-          count = 0;
-        }
-      }
-      
-      if (count > 0) {
-        await batch.commit();
+      const deleteIds = recordsToDelete.map(s => s.id).filter(Boolean);
+      if (deleteIds.length > 0) {
+        await deleteMultipleStudents(deleteIds);
       }
       
       onSuccess();
@@ -376,9 +318,6 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
   const handleSaveUpdate = async () => {
     setIsProcessing(true);
     try {
-      let batch = writeBatch(db);
-      let count = 0;
-      
       const manualMatches = unmatchedUnss
         .filter(u => u.selectedStudentId !== null)
         .map(u => ({
@@ -395,19 +334,12 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
         ...manualMatches
       ];
 
-      for (const update of allUpdates) {
-        const docRef = doc(db, "students", update.id);
-        batch.update(docRef, { licenseNumber: update.licenseNumber });
-        count++;
-        
-        if (count % 499 === 0) {
-          await batch.commit();
-          batch = writeBatch(db);
-        }
-      }
-      
-      if (count % 499 !== 0) {
-        await batch.commit();
+      // Perform updates concurrently in small batches
+      for (let i = 0; i < allUpdates.length; i += 20) {
+        const batch = allUpdates.slice(i, i + 20);
+        await Promise.all(
+          batch.map(u => updateStudent(u.id, { licenseNumber: u.licenseNumber }))
+        );
       }
       
       onSuccess();

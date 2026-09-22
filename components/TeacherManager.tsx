@@ -1,8 +1,7 @@
-import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import React, { useState, useEffect } from 'react';
 import { Teacher } from '../types';
 import { Loader2, Plus, Edit2, Trash2 } from 'lucide-react';
+import { getTeachersList, addTeacherApi, updateTeacherApi, deleteTeacherApi } from '../lib/db';
 
 export const TeacherManager: React.FC = () => {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -11,17 +10,19 @@ export const TeacherManager: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
 
-  useEffect(() => {
-    const q = query(collection(db, 'teachers'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Teacher[] = [];
-      snapshot.forEach(doc => {
-        data.push({ id: doc.id, ...doc.data() } as Teacher);
-      });
+  const fetchTeachers = async () => {
+    try {
+      const data = await getTeachersList();
       setTeachers(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
       setLoading(false);
-    });
-    return () => unsubscribe();
+    }
+  };
+
+  useEffect(() => {
+    fetchTeachers();
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -30,13 +31,14 @@ export const TeacherManager: React.FC = () => {
 
     try {
       if (editingId) {
-        await updateDoc(doc(db, 'teachers', editingId), { name: name.trim() });
+        await updateTeacherApi(editingId, name.trim());
       } else {
-        await addDoc(collection(db, 'teachers'), { name: name.trim() });
+        await addTeacherApi(name.trim());
       }
       setName('');
       setEditingId(null);
       setIsAdding(false);
+      await fetchTeachers();
     } catch (err) {
       console.error(err);
       alert('Erreur lors de la sauvegarde.');
@@ -52,7 +54,8 @@ export const TeacherManager: React.FC = () => {
   const handleDelete = async (id: string) => {
     if (window.confirm('Voulez-vous vraiment supprimer cet enseignant ?')) {
       try {
-        await deleteDoc(doc(db, 'teachers', id));
+        await deleteTeacherApi(id);
+        await fetchTeachers();
       } catch (err) {
         console.error(err);
       }

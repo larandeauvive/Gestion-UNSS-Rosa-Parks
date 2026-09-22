@@ -1,8 +1,7 @@
-import { collection, query, updateDoc, doc, where, getDoc, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import React, { useState, useEffect, useMemo } from 'react';
 import { PublicStudent, Session } from '../types';
-import { CheckCircle2, Search, AlertTriangle, ShieldCheck, Users, Lock } from 'lucide-react';
+import { CheckCircle2, Search, AlertTriangle, ShieldCheck, Users } from 'lucide-react';
+import { getSession, getPublicDirectory, enrollInSession } from '../lib/db';
 
 interface PublicEnrollmentProps {
   sessionId: string;
@@ -16,36 +15,27 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
   const [error, setError] = useState('');
   const [enrollingId, setEnrollingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const sessionDoc = await getDoc(doc(db, 'sessions', sessionId));
-        if (!sessionDoc.exists()) {
-          setError('Séance introuvable.');
-          setLoading(false);
-          return;
-        }
-        const sessionData = { id: sessionDoc.id, ...sessionDoc.data() } as Session;
-        setSession(sessionData);
-
-        // Répertoire public conforme RGPD / Éducation Nationale (uniquement Nom et Prénom)
-        const studentsQuery = query(
-          collection(db, 'public_students_directory'), 
-          where('schoolYear', '==', sessionData.schoolYear)
-        );
-        const studentsSnapshot = await getDocs(studentsQuery);
-        const studentsList: PublicStudent[] = [];
-        studentsSnapshot.forEach(doc => {
-          studentsList.push({ id: doc.id, ...doc.data() } as PublicStudent);
-        });
-        setStudents(studentsList);
+  const fetchData = async () => {
+    try {
+      const sessionData = await getSession(sessionId);
+      if (!sessionData) {
+        setError('Séance introuvable.');
         setLoading(false);
-      } catch (err) {
-        console.error(err);
-        setError('Erreur de chargement.');
-        setLoading(false);
+        return;
       }
-    };
+      setSession(sessionData);
+
+      const studentsList = await getPublicDirectory(sessionData.schoolYear);
+      setStudents(studentsList);
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError('Erreur de chargement.');
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
   }, [sessionId]);
 
@@ -64,20 +54,12 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
 
     setEnrollingId(student.id);
     try {
+      await enrollInSession(session.id, student.id);
+      
       const currentEnrolled = new Set(session.enrolledStudentIds || []);
       currentEnrolled.add(student.id);
-      
       const newEnrolledIds = Array.from(currentEnrolled);
-      await updateDoc(doc(db, 'sessions', session.id), {
-        enrolledStudentIds: newEnrolledIds
-      });
-      
-      if (session.convocationId) {
-        await updateDoc(doc(db, 'convocations', session.convocationId), {
-          studentIds: newEnrolledIds
-        });
-      }
-      
+
       setSession({
         ...session,
         enrolledStudentIds: newEnrolledIds

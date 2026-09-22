@@ -1,7 +1,10 @@
-import { collection, onSnapshot, query, addDoc, updateDoc, doc, deleteDoc, where, getDoc, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Convocation, Session, Student } from '../types';
+import { 
+  getConvocationsList, getSessionsList, saveSessionApi, 
+  deleteSessionApi, saveConvocationApi, deleteConvocationApi,
+  getAppSetting
+} from '../lib/db';
 import { 
   format, addMonths, subMonths, startOfMonth, endOfMonth, 
   startOfWeek, endOfWeek, isSameMonth, isSameDay, eachDayOfInterval 
@@ -83,75 +86,58 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     setSelectedEvent(null);
   };
 
-  useEffect(() => {
-    let convosLoaded = false;
-    let sessionsLoaded = false;
+  const loadCalendarData = useCallback(async () => {
+    try {
+      const [convos, sessions] = await Promise.all([
+        getConvocationsList(activeYear),
+        getSessionsList(activeYear)
+      ]);
 
-    const qConvo = query(collection(db, 'convocations'), where('schoolYear', '==', activeYear));
-    const unsubConvo = onSnapshot(qConvo, (snapshot) => {
-      const data: Convocation[] = [];
-      snapshot.forEach(d => data.push({ id: d.id, ...d.data() } as Convocation));
-      
-      setEvents(prev => {
-        const filtered = prev.filter(e => e.type !== 'convocation');
-        const newEvents = data
-          .filter(c => c.departureDate && !isNaN(new Date(c.departureDate).getTime()) && !c.sessionId)
-          .map(c => ({
-            id: c.id,
-            type: 'convocation' as const,
-            date: c.departureDate,
-            title: c.competitionName || 'Convocation',
-            studentIds: c.studentIds || [],
-            raw: c
-          }));
-        return [...filtered, ...newEvents];
-      });
-      convosLoaded = true;
-      if (convosLoaded && sessionsLoaded) setLoading(false);
-    });
+      const convoEvents: CalendarEvent[] = convos
+        .filter(c => c.departureDate && !isNaN(new Date(c.departureDate).getTime()) && !c.sessionId)
+        .map(c => ({
+          id: c.id,
+          type: 'convocation' as const,
+          date: c.departureDate,
+          title: c.competitionName || 'Convocation',
+          studentIds: c.studentIds || [],
+          raw: c
+        }));
 
-    const qSession = query(collection(db, 'sessions'), where('schoolYear', '==', activeYear));
-    const unsubSession = onSnapshot(qSession, (snapshot) => {
-      const data: Session[] = [];
-      snapshot.forEach(d => data.push({ id: d.id, ...d.data() } as Session));
-      
-      setEvents(prev => {
-        const filtered = prev.filter(e => e.type !== 'session');
-        const newEvents = data
-          .filter(s => s.date && !isNaN(new Date(s.date).getTime()))
-          .map(s => ({
-            id: s.id,
-            type: 'session' as const,
-            date: s.date,
-            title: s.name || 'Séance',
-            studentIds: s.presentStudentIds || [],
-            raw: s
-          }));
-        return [...filtered, ...newEvents];
-      });
-      sessionsLoaded = true;
-      if (convosLoaded && sessionsLoaded) setLoading(false);
-    });
+      const sessionEvents: CalendarEvent[] = sessions
+        .filter(s => s.date && !isNaN(new Date(s.date).getTime()))
+        .map(s => ({
+          id: s.id,
+          type: 'session' as const,
+          date: s.date,
+          title: s.name || 'Séance',
+          studentIds: s.presentStudentIds || [],
+          raw: s
+        }));
 
-    return () => {
-      unsubConvo();
-      unsubSession();
-    };
+      setEvents([...convoEvents, ...sessionEvents]);
+    } catch (err) {
+      console.warn("Erreur chargement calendrier:", err);
+    } finally {
+      setLoading(false);
+    }
   }, [activeYear]);
 
-  // Écoute en temps réel du formulaire d'inscription officiel
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'settings', 'registrationForm'), (docSnap) => {
-      if (docSnap.exists()) {
-        setRegistrationForm(docSnap.data() as RegistrationFormDoc);
-      } else {
-        setRegistrationForm(null);
-      }
-    }, (err) => {
-      console.warn("Erreur chargement formulaire inscription:", err);
-    });
+    loadCalendarData();
+  }, [loadCalendarData]);
 
-    return () => unsub();
+  // Chargement du formulaire d'inscription officiel
+  useEffect(() => {
+    const fetchForm = async () => {
+      try {
+        const form = await getAppSetting<RegistrationFormDoc>('registrationForm');
+        setRegistrationForm(form);
+      } catch (err) {
+        console.warn("Erreur chargement formulaire inscription:", err);
+      }
+    };
+    fetchForm();
   }, []);
 
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
@@ -211,11 +197,12 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           registrationOpenDate: newEventRegistrationOpenDate || null,
           registrationCloseDate: newEventRegistrationCloseDate || null
         };
-        await updateDoc(doc(db, 'sessions', editingEventId), updateData);
+        await saveSessionApi({ ...updateData, id: editingEventId });
         
         const sessionDoc = events.find(ev => ev.id === editingEventId)?.raw as Session;
         if (sessionDoc?.convocationId) {
           const convUpdateData = {
+            id: sessionDoc.convocationId,
             competitionName: newEventName || 'Séance',
             departureDate: format(clickedDate, 'yyyy-MM-dd') + (newEventTime ? `T${newEventTime}` : 'T00:00'),
             returnDate: format(clickedDate, 'yyyy-MM-dd') + (newEventEndTime ? `T${newEventEndTime}` : 'T23:59'),
@@ -225,7 +212,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
             cafeteriaTime: newEventCafeteriaTime,
             returnTime: newEventReturnTime
           };
-          await updateDoc(doc(db, 'convocations', sessionDoc.convocationId), convUpdateData);
+          await saveConvocationApi(convUpdateData);
         }
       } else {
         const sessionData: Partial<Session> = {
@@ -248,9 +235,9 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           presentStudentIds: [],
           schoolYear: activeYear
         };
-        const sessionRef = await addDoc(collection(db, 'sessions'), sessionData);
+        const sessionResult = await saveSessionApi(sessionData);
         
-        if (newEventGenerateConvocation) {
+        if (newEventGenerateConvocation && sessionResult?.id) {
            const convData: Partial<Convocation> = {
               competitionName: newEventName || 'Séance',
               departureDate: format(clickedDate, 'yyyy-MM-dd') + (newEventTime ? `T${newEventTime}` : 'T00:00'),
@@ -260,18 +247,21 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
               needPicnic: 'NON',
               schoolYear: activeYear,
               studentIds: [],
-              sessionId: sessionRef.id,
+              sessionId: sessionResult.id,
               meetingTime: newEventMeetingTime,
               meetingLocation: newEventMeetingLocation,
               cafeteriaTime: newEventCafeteriaTime,
               returnTime: newEventReturnTime
            };
-           const convRef = await addDoc(collection(db, 'convocations'), convData);
-           await updateDoc(doc(db, 'sessions', sessionRef.id), { convocationId: convRef.id });
+           const convResult = await saveConvocationApi(convData);
+           if (convResult?.id) {
+             await saveSessionApi({ id: sessionResult.id, convocationId: convResult.id });
+           }
         }
       }
       setIsCreatingEvent(false);
       setEditingEventId(null);
+      await loadCalendarData();
     } catch (err) {
       console.error(err);
       alert('Erreur lors de l\'enregistrement de la séance.');
@@ -283,14 +273,17 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
   const handleDeleteEvent = async (event: CalendarEvent) => {
     if (window.confirm(`Êtes-vous sûr de vouloir supprimer cet événement (${event.title}) ? Cette action est irréversible.`)) {
       try {
-        const collectionName = event.type === 'session' ? 'sessions' : 'convocations';
-        await deleteDoc(doc(db, collectionName, event.id));
-        
-        if (event.type === 'session' && (event.raw as Session).convocationId) {
-          await deleteDoc(doc(db, 'convocations', (event.raw as Session).convocationId!));
+        if (event.type === 'session') {
+          await deleteSessionApi(event.id);
+          if ((event.raw as Session).convocationId) {
+            await deleteConvocationApi((event.raw as Session).convocationId!);
+          }
+        } else {
+          await deleteConvocationApi(event.id);
         }
         
         setSelectedEvent(null);
+        await loadCalendarData();
       } catch (err) {
         console.error(err);
         alert('Erreur lors de la suppression de l\'événement.');

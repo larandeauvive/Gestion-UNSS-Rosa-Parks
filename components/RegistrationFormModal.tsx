@@ -5,8 +5,7 @@ import {
 } from 'lucide-react';
 import { RegistrationFormDoc } from '../types';
 import { formatFileSize, downloadRegistrationForm, generateAndPrintDefaultForm } from '../lib/registrationFormHelper';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { saveAppSetting, deleteAppSetting } from '../lib/db';
 
 interface Props {
   isOpen: boolean;
@@ -45,10 +44,9 @@ export const RegistrationFormModal: React.FC<Props> = ({
     setError(null);
     setSuccessMessage(null);
 
-    // Vérification de taille (Firestore limite par document ~ 1 Mo, donc 900 Ko max en base64 pour être totalement sécurisé)
-    const MAX_SIZE = 950 * 1024; // ~950 Ko
+    const MAX_SIZE = 5 * 1024 * 1024; // 5 Mo en PostgreSQL
     if (file.size > MAX_SIZE) {
-      setError(`Le fichier est trop volumineux (${formatFileSize(file.size)}). Pour garantir un chargement instantané sans saturation de la base, veuillez déposer un document de moins de 900 Ko (utilisez un PDF compressé).`);
+      setError(`Le fichier est trop volumineux (${formatFileSize(file.size)}). Veuillez déposer un document de moins de 5 Mo.`);
       return;
     }
 
@@ -96,7 +94,7 @@ export const RegistrationFormModal: React.FC<Props> = ({
         updatedBy: 'Enseignant AS Rosa Parks'
       };
 
-      await setDoc(doc(db, 'settings', 'registrationForm'), formDoc, { merge: true });
+      await saveAppSetting('registrationForm', formDoc);
       
       setSuccessMessage("Le formulaire a été enregistré avec succès ! Il est immédiatement téléchargeable sur le calendrier partagé.");
       setSelectedFile(null);
@@ -109,7 +107,7 @@ export const RegistrationFormModal: React.FC<Props> = ({
       }, 4000);
     } catch (err: any) {
       console.error("Erreur enregistrement formulaire:", err);
-      setError("Impossible d'enregistrer le fichier sur Firestore. Vérifiez votre connexion.");
+      setError("Impossible d'enregistrer le fichier sur la base de données.");
     } finally {
       setSaving(false);
     }
@@ -122,7 +120,7 @@ export const RegistrationFormModal: React.FC<Props> = ({
 
     setSaving(true);
     try {
-      await deleteDoc(doc(db, 'settings', 'registrationForm'));
+      await deleteAppSetting('registrationForm');
       if (onFormUpdated) {
         onFormUpdated(null);
       }
@@ -139,122 +137,95 @@ export const RegistrationFormModal: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-indigo-50/30">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-500/30">
+            <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-200">
               <FileUp className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-base leading-tight">Gestion du Formulaire d'Inscription</h3>
-              <p className="text-xs text-slate-400">Document téléchargeable sur le calendrier public partagé</p>
+              <h3 className="text-lg font-bold text-slate-900">Formulaire d'adhésion officiel</h3>
+              <p className="text-xs text-slate-500 font-medium">Document téléchargeable par les parents et élèves sur le calendrier public</p>
             </div>
           </div>
-          <button
+          <button 
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="p-6 space-y-6">
-
-          {/* Success Banner */}
-          {successMessage && (
-            <div className="flex items-center gap-2.5 p-3.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-semibold">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{successMessage}</span>
-            </div>
-          )}
-
-          {/* Error Banner */}
           {error && (
-            <div className="flex items-center gap-2.5 p-3.5 bg-rose-50 text-rose-800 border border-rose-200 rounded-xl text-xs font-medium">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>{error}</span>
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3 text-rose-800 text-sm">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Attention</p>
+                <p className="text-xs text-rose-700 mt-0.5">{error}</p>
+              </div>
             </div>
           )}
 
-          {/* Current Uploaded Document Status */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4">
-            <div className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center justify-between">
-              <span>Fichier actuellement en ligne</span>
-              {currentForm ? (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Actif & Téléchargeable
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                  Modèle standard par défaut
-                </span>
-              )}
+          {successMessage && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3 text-emerald-800 text-sm">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Succès</p>
+                <p className="text-xs text-emerald-700 mt-0.5">{successMessage}</p>
+              </div>
             </div>
+          )}
 
+          {/* Formulaire existant */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Document actuellement en ligne</h4>
             {currentForm ? (
-              <div className="flex items-center justify-between gap-4 p-3 bg-white rounded-lg border border-slate-200 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-lg border border-slate-200">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+                  <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg shrink-0">
                     <FileText className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-bold text-slate-900 truncate" title={currentForm.fileName}>
-                      {currentForm.fileName}
-                    </div>
-                    <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-                      <span>{formatFileSize(currentForm.fileSize)}</span>
-                      <span>•</span>
-                      <span>Mis à jour le {new Date(currentForm.updatedAt).toLocaleDateString('fr-FR')}</span>
-                    </div>
+                    <p className="text-sm font-bold text-slate-800 truncate">{currentForm.fileName}</p>
+                    <p className="text-xs text-slate-500">
+                      {formatFileSize(currentForm.fileSize)} • Mis à jour le {new Date(currentForm.updatedAt).toLocaleDateString('fr-FR')}
+                    </p>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                   <button
-                    type="button"
                     onClick={() => downloadRegistrationForm(currentForm)}
-                    className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                    title="Tester le téléchargement"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
                   >
-                    <Download className="w-4 h-4" />
+                    <Download className="w-3.5 h-3.5" /> Tester
                   </button>
                   <button
-                    type="button"
                     onClick={handleDelete}
                     disabled={saving}
-                    className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                    title="Supprimer le fichier"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-rose-600 hover:bg-rose-50 text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5" /> Supprimer
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="text-xs text-slate-500 space-y-2">
-                <p>
-                  Aucun fichier personnalisé n'a encore été téléversé. Par défaut, le calendrier propose le modèle d'adhésion officiel de l'AS Rosa Parks.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => generateAndPrintDefaultForm()}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Apercevoir le modèle par défaut</span>
-                </button>
+              <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-3 text-xs text-amber-800 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Aucun document personnalisé n'est actuellement en ligne.</span>
+                  <p className="mt-0.5 text-amber-700">Par défaut, le bouton public génère une fiche type d'adhésion officielle imprimable.</p>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Upload Zone (Drag and Drop + Click) */}
+          {/* Zone de drop / upload */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-              {currentForm ? "Remplacer le formulaire par un nouveau fichier" : "Téléverser votre formulaire (PDF, Scan, Document)"}
-            </label>
-
+            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Déposer votre nouveau document (PDF recommandé)</h4>
             <div
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
@@ -263,86 +234,86 @@ export const RegistrationFormModal: React.FC<Props> = ({
               onClick={() => fileInputRef.current?.click()}
               className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
                 dragActive 
-                  ? 'border-indigo-600 bg-indigo-50/50' 
-                  : selectedFile 
-                    ? 'border-emerald-500 bg-emerald-50/20' 
-                    : 'border-slate-300 hover:border-indigo-400 bg-slate-50/60 hover:bg-slate-50'
+                  ? 'border-indigo-500 bg-indigo-50/50 scale-[0.99]' 
+                  : 'border-slate-300 hover:border-indigo-400 hover:bg-slate-50'
               }`}
             >
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                accept=".pdf,image/png,image/jpeg,image/webp"
                 onChange={handleFileChange}
                 className="hidden"
               />
 
               {selectedFile ? (
-                <div className="space-y-2">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
-                    <CheckCircle2 className="w-6 h-6" />
+                <div className="flex flex-col items-center">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2">
+                    <FileText className="w-6 h-6" />
                   </div>
-                  <div className="text-sm font-bold text-slate-900">{selectedFile.name}</div>
-                  <div className="text-xs text-slate-500">{formatFileSize(selectedFile.size)} • Prêt à être mis en ligne</div>
-                  <div className="pt-2">
-                    <span className="text-xs font-medium text-indigo-600 hover:underline">Cliquez pour choisir un autre fichier</span>
-                  </div>
+                  <p className="text-sm font-bold text-slate-800">{selectedFile.name}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{formatFileSize(selectedFile.size)}</p>
+                  <span className="mt-3 inline-block text-xs font-semibold text-indigo-600 hover:underline">
+                    Cliquer pour changer de fichier
+                  </span>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto border border-indigo-100">
+                <div className="flex flex-col items-center">
+                  <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
                     <FileUp className="w-6 h-6" />
                   </div>
-                  <div className="text-sm font-bold text-slate-800">
-                    Glissez votre fichier ici ou <span className="text-indigo-600 underline">parcourez</span>
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    PDF conseillé (ou Word, image). Taille maximale recommandée : 900 Ko.
-                  </div>
+                  <p className="text-sm font-bold text-slate-800">
+                    Glissez-déposez votre formulaire ici, ou <span className="text-indigo-600">parcourez</span>
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Format PDF ou Image (JPEG, PNG). Poids maximum : 5 Mo.
+                  </p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Explanatory Info Card */}
-          <div className="p-3 bg-indigo-50/60 border border-indigo-100 rounded-xl flex items-start gap-2.5 text-xs text-indigo-900">
-            <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-            <div className="leading-relaxed">
-              <strong>Synchronisation instantanée :</strong> Dès que vous cliquez sur <em>Enregistrer</em>, ce formulaire apparaîtra en haut du calendrier que vous partagez avec les élèves et familles.
+          {/* Générateur alternatif intégré */}
+          <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 flex items-start justify-between gap-4">
+            <div className="flex items-start gap-2.5">
+              <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-bold text-indigo-900">Besoin d'un modèle prêt à l'emploi ?</p>
+                <p className="text-xs text-indigo-700 mt-0.5">
+                  Vous pouvez générer et imprimer instantanément le formulaire type officiel de l'AS Rosa Parks (prêt pour signature parentale).
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => generateAndPrintDefaultForm()}
+              className="px-3 py-1.5 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 rounded-lg text-xs font-semibold whitespace-nowrap shadow-xs transition-colors shrink-0"
+            >
+              Générer modèle
+            </button>
           </div>
-
         </div>
 
-        {/* Footer actions */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+        {/* Footer */}
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
           <button
-            type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-xl transition-colors"
+            className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors"
           >
             Fermer
           </button>
-
           <button
-            type="button"
             onClick={handleSave}
             disabled={!selectedFile || saving}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm ${
-              selectedFile && !saving
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-            }`}
+            className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-md shadow-indigo-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Enregistrement en cours...</span>
+                <Loader2 className="w-4 h-4 animate-spin" /> Enregistrement...
               </>
             ) : (
               <>
-                <FileUp className="w-4 h-4" />
-                <span>Mettre en ligne sur le calendrier</span>
+                <FileUp className="w-4 h-4" /> Mettre en ligne
               </>
             )}
           </button>

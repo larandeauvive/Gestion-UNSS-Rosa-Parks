@@ -1,7 +1,6 @@
-import { collection, doc, getDocs, writeBatch } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import React, { useState } from 'react';
 import { Download, Upload, AlertTriangle, Loader2 } from 'lucide-react';
+import { fetchBackup, restoreBackup } from '../lib/db';
 
 interface BackupManagerProps {
   isOpen: boolean;
@@ -16,20 +15,10 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ isOpen, onClose })
 
   if (!isOpen) return null;
 
-  const COLLECTIONS = ['students', 'sessions', 'convocations', 'teachers'];
-
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const backupData: Record<string, any[]> = {};
-      
-      for (const colName of COLLECTIONS) {
-        const querySnapshot = await getDocs(collection(db, colName));
-        backupData[colName] = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-      }
+      const backupData = await fetchBackup();
 
       const jsonStr = JSON.stringify(backupData, null, 2);
       const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -37,14 +26,14 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ isOpen, onClose })
       
       const a = document.createElement('a');
       a.href = url;
-      a.download = `backup_as_rosa_parks_${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `backup_as_rosa_parks_postgresql_${new Date().toISOString().split('T')[0]}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert('Erreur lors de la sauvegarde.');
+      alert('Erreur lors de la sauvegarde: ' + (e.message || ''));
     } finally {
       setIsExporting(false);
     }
@@ -70,143 +59,116 @@ export const BackupManager: React.FC<BackupManagerProps> = ({ isOpen, onClose })
         const content = evt.target?.result as string;
         const data = JSON.parse(content);
         
-        // Validate basic structure
-        let isValid = false;
-        for (const colName of COLLECTIONS) {
-          if (data[colName] && Array.isArray(data[colName])) {
-            isValid = true;
-          }
-        }
-
-        if (!isValid) {
-           throw new Error("Le fichier JSON ne contient pas de données compatibles.");
-        }
-
-        let batch = writeBatch(db);
-        let count = 0;
-
-        for (const colName of COLLECTIONS) {
-          if (data[colName] && Array.isArray(data[colName])) {
-            for (const item of data[colName]) {
-              const { id, ...docData } = item;
-              if (!id) continue;
-              
-              const docRef = doc(db, colName, id);
-              batch.set(docRef, docData);
-              count++;
-
-              if (count % 499 === 0) {
-                await batch.commit();
-                batch = writeBatch(db);
-              }
-            }
-          }
-        }
-
-        if (count % 499 !== 0) {
-          await batch.commit();
-        }
+        await restoreBackup(data);
 
         setImportStatus('success');
-        
-        // Auto-close after success
         setTimeout(() => {
-           onClose();
-        }, 3000);
-      } catch (e: any) {
-        console.error(e);
-        setErrorMessage(e.message || "Erreur lors de la lecture ou l'import du fichier.");
+          window.location.reload();
+        }, 1500);
+      } catch (err: any) {
+        console.error(err);
         setImportStatus('error');
+        setErrorMessage(err.message || "Erreur lors de la restauration du fichier.");
       } finally {
         setIsImporting(false);
-        if (e.target) {
-            e.target.value = ''; // Reset input
-        }
       }
     };
     reader.readAsText(file);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div className="p-6">
-          <h2 className="text-xl font-bold text-slate-900 mb-2">Sauvegarde et Restauration</h2>
-          <p className="text-sm text-slate-500 mb-6">
-            Exportez l'ensemble de la base de données de l'application (élèves, séances, convocations, encadrants) ou restaurez une sauvegarde précédente.
-          </p>
-
-          <div className="space-y-6">
-            {/* Export Section */}
-            <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
-              <div className="flex items-start gap-4">
-                <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
-                  <Download className="w-6 h-6" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-slate-900 mb-1">Sauvegarder les données</h3>
-                  <p className="text-xs text-slate-500 mb-3">
-                    Téléchargez un fichier JSON contenant l'intégralité de la base de données actuelle. Gardez ce fichier en lieu sûr.
-                  </p>
-                  <button 
-                    onClick={handleExport}
-                    disabled={isExporting || isImporting}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50"
-                  >
-                    {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                    Télécharger la sauvegarde
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Import Section */}
-            <div className="bg-amber-50 rounded-xl p-5 border border-amber-100">
-              <div className="flex items-start gap-4">
-                <div className="bg-amber-100 p-2 rounded-lg text-amber-600">
-                  <Upload className="w-6 h-6" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-amber-900 mb-1">Restaurer les données</h3>
-                  <p className="text-xs text-amber-700/80 mb-3">
-                    Attention : L'importation d'un fichier écrasera les documents existants portant le même identifiant. Utilisez cette fonction uniquement si vous souhaitez restaurer vos données depuis une sauvegarde.
-                  </p>
-                  
-                  {importStatus === 'error' && (
-                    <div className="mb-3 text-xs text-red-600 flex items-center gap-1 bg-red-50 p-2 rounded-md">
-                      <AlertTriangle className="w-4 h-4" />
-                      {errorMessage}
-                    </div>
-                  )}
-
-                  {importStatus === 'success' && (
-                    <div className="mb-3 text-xs text-green-600 flex items-center gap-1 bg-green-50 p-2 rounded-md font-medium">
-                      ✓ Restauration terminée avec succès.
-                    </div>
-                  )}
-
-                  <label className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors cursor-pointer w-max ${isImporting ? 'opacity-50 cursor-not-allowed bg-white border-amber-200 text-amber-500' : 'bg-white border-amber-300 text-amber-700 hover:bg-amber-100'}`}>
-                    {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                    Sélectionner un fichier JSON
-                    <input 
-                      type="file" 
-                      accept=".json"
-                      className="hidden" 
-                      onChange={handleImport}
-                      disabled={isImporting || isExporting}
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-100">
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Sauvegarde & Restauration (PostgreSQL)</h3>
+            <p className="text-xs text-slate-500 mt-1">Exportez ou restaurez l'intégralité de la base de données relationnelle.</p>
           </div>
-        </div>
-        
-        <div className="bg-slate-50 px-6 py-4 flex justify-end border-t border-slate-100">
           <button 
             onClick={onClose}
-            disabled={isExporting || isImporting}
-            className="px-5 py-2.5 text-slate-600 font-medium hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-50"
+            className="text-slate-400 hover:text-slate-600 rounded-lg p-1 hover:bg-slate-100 transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="border border-slate-200 rounded-xl p-5 hover:border-slate-300 transition-colors">
+            <h4 className="font-semibold text-slate-800 flex items-center gap-2 mb-2">
+              <Download className="w-5 h-5 text-indigo-600" /> Exporter les données
+            </h4>
+            <p className="text-sm text-slate-600 mb-4">
+              Téléchargez un fichier JSON contenant toutes les données (élèves, créneaux, séances, convocations, personnels).
+            </p>
+            <button
+              onClick={handleExport}
+              disabled={isExporting}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium shadow-sm disabled:opacity-50"
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Export en cours...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" /> Exporter en JSON
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="border border-slate-200 rounded-xl p-5 hover:border-slate-300 transition-colors">
+            <h4 className="font-semibold text-slate-800 flex items-center gap-2 mb-2">
+              <Upload className="w-5 h-5 text-amber-600" /> Restaurer une sauvegarde
+            </h4>
+            <p className="text-sm text-slate-600 mb-4">
+              Importez un fichier JSON préalablement sauvegardé pour réécrire ou compléter les données.
+            </p>
+
+            <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 mb-4 flex gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-800">
+                La restauration mettra à jour et ajoutera les documents du fichier dans la base PostgreSQL.
+              </p>
+            </div>
+
+            <label className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-dashed border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium cursor-pointer ${isImporting ? 'opacity-50 pointer-events-none' : ''}`}>
+              {isImporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-indigo-600" /> Restauration en cours...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 text-slate-500" /> Choisir un fichier JSON
+                </>
+              )}
+              <input 
+                type="file" 
+                accept=".json,application/json" 
+                onChange={handleImport}
+                disabled={isImporting}
+                className="hidden" 
+              />
+            </label>
+
+            {importStatus === 'success' && (
+              <p className="mt-2 text-sm text-emerald-600 font-semibold text-center animate-in fade-in">
+                Restauration réussie ! Rechargement...
+              </p>
+            )}
+
+            {importStatus === 'error' && (
+              <p className="mt-2 text-sm text-rose-600 font-medium text-center animate-in fade-in">
+                {errorMessage}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 rounded-lg hover:bg-slate-200 transition-colors"
           >
             Fermer
           </button>
