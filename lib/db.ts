@@ -11,6 +11,33 @@ import {
   rowToStaffMember, staffMemberToRow,
   rowToStaffAttendance, staffAttendanceToRow
 } from './supabaseMappers';
+import {
+  getLocalStudents,
+  setLocalStudents,
+  saveLocalStudent,
+  batchSaveLocalStudents,
+  deleteLocalStudent,
+  deleteMultipleLocalStudents,
+  updateLocalStudent,
+  updateMultipleLocalStudents,
+  getLocalTeachers,
+  setLocalTeachers,
+  getLocalSessions,
+  setLocalSessions,
+  saveLocalSession,
+  getLocalConvocations,
+  setLocalConvocations,
+  getLocalEveningSlots,
+  setLocalEveningSlots,
+  getLocalStaffMembers,
+  setLocalStaffMembers,
+  getLocalStaffAttendance,
+  setLocalStaffAttendance,
+  getLocalSetting,
+  saveLocalSetting,
+  restoreBackupToLocalStorage,
+  hasLocalStudents
+} from './localStorageDb';
 
 const API_BASE = '/api';
 
@@ -31,7 +58,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 // ----------------------------------------------------
-// STUDENTS (Direct Supabase client)
+// STUDENTS (Supabase client + API + LocalStorage fallback)
 // ----------------------------------------------------
 export const getStudents = async (schoolYear?: string): Promise<Student[]> => {
   try {
@@ -41,15 +68,39 @@ export const getStudents = async (schoolYear?: string): Promise<Student[]> => {
     }
     const { data, error } = await query;
     if (error) {
-      console.warn('Supabase getStudents query error, falling back to API:', error.message);
-      const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
-      return fetchJson<Student[]>(`${API_BASE}/students${q}`);
+      console.warn('Supabase getStudents query error, falling back to API / LocalStorage:', error.message);
+      try {
+        const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+        const apiData = await fetchJson<Student[]>(`${API_BASE}/students${q}`);
+        if (apiData && apiData.length > 0) {
+          setLocalStudents(apiData);
+          return apiData;
+        }
+      } catch (apiErr) {
+        console.warn('API fallback error, checking localStorage:', apiErr);
+      }
+      return getLocalStudents(schoolYear);
     }
-    return (data || []).map(rowToStudent);
+    const mapped = (data || []).map(rowToStudent);
+    if (mapped.length > 0) {
+      setLocalStudents(mapped);
+    } else if (hasLocalStudents()) {
+      return getLocalStudents(schoolYear);
+    }
+    return mapped;
   } catch (err) {
-    console.warn('getStudents fallback:', err);
-    const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
-    return fetchJson<Student[]>(`${API_BASE}/students${q}`);
+    console.warn('getStudents fallback to LocalStorage:', err);
+    try {
+      const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+      const apiData = await fetchJson<Student[]>(`${API_BASE}/students${q}`);
+      if (apiData && apiData.length > 0) {
+        setLocalStudents(apiData);
+        return apiData;
+      }
+    } catch {
+      // ignore
+    }
+    return getLocalStudents(schoolYear);
   }
 };
 
@@ -64,11 +115,29 @@ export const getPublicDirectory = async (schoolYear: string): Promise<PublicStud
       .order('last_name', { ascending: true });
 
     if (error) {
-      console.warn('Supabase getPublicDirectory error, falling back to API:', error.message);
-      return fetchJson<PublicStudent[]>(`${API_BASE}/public-directory?schoolYear=${encodeURIComponent(schoolYear)}`);
+      console.warn('Supabase getPublicDirectory error, falling back to API / LocalStorage:', error.message);
+      try {
+        return await fetchJson<PublicStudent[]>(`${API_BASE}/public-directory?schoolYear=${encodeURIComponent(schoolYear)}`);
+      } catch {
+        const local = getLocalStudents(schoolYear);
+        return local.map(s => ({
+          id: s.id,
+          lastName: s.lastName || '',
+          firstName: s.firstName || '',
+          classGroup: s.classGroup || '',
+          schoolYear: s.schoolYear || '',
+          isAdult: s.isAdult || false,
+          paid: s.paid || 'NON',
+          parentalAuth: s.parentalAuth || 'NON',
+          swimmingCertificate: s.swimmingCertificate || 'NON',
+          imageRights: s.imageRights || 'NON',
+          licenseNumber: s.licenseNumber || '',
+          hasLicense: !!(s.licenseNumber && s.licenseNumber.trim().length > 0) || s.opussChecked === true || s.paid === 'OUI'
+        }));
+      }
     }
 
-    return (data || []).map((row: any) => ({
+    const mapped = (data || []).map((row: any) => ({
       id: row.id,
       lastName: row.last_name ?? '',
       firstName: row.first_name ?? '',
@@ -82,8 +151,46 @@ export const getPublicDirectory = async (schoolYear: string): Promise<PublicStud
       licenseNumber: row.license_number ?? '',
       hasLicense: !!(row.license_number && row.license_number.trim().length > 0) || row.opuss_checked === true || row.paid === 'OUI'
     }));
+
+    if (mapped.length === 0 && hasLocalStudents()) {
+      const local = getLocalStudents(schoolYear);
+      return local.map(s => ({
+        id: s.id,
+        lastName: s.lastName || '',
+        firstName: s.firstName || '',
+        classGroup: s.classGroup || '',
+        schoolYear: s.schoolYear || '',
+        isAdult: s.isAdult || false,
+        paid: s.paid || 'NON',
+        parentalAuth: s.parentalAuth || 'NON',
+        swimmingCertificate: s.swimmingCertificate || 'NON',
+        imageRights: s.imageRights || 'NON',
+        licenseNumber: s.licenseNumber || '',
+        hasLicense: !!(s.licenseNumber && s.licenseNumber.trim().length > 0) || s.opussChecked === true || s.paid === 'OUI'
+      }));
+    }
+
+    return mapped;
   } catch {
-    return fetchJson<PublicStudent[]>(`${API_BASE}/public-directory?schoolYear=${encodeURIComponent(schoolYear)}`);
+    try {
+      return await fetchJson<PublicStudent[]>(`${API_BASE}/public-directory?schoolYear=${encodeURIComponent(schoolYear)}`);
+    } catch {
+      const local = getLocalStudents(schoolYear);
+      return local.map(s => ({
+        id: s.id,
+        lastName: s.lastName || '',
+        firstName: s.firstName || '',
+        classGroup: s.classGroup || '',
+        schoolYear: s.schoolYear || '',
+        isAdult: s.isAdult || false,
+        paid: s.paid || 'NON',
+        parentalAuth: s.parentalAuth || 'NON',
+        swimmingCertificate: s.swimmingCertificate || 'NON',
+        imageRights: s.imageRights || 'NON',
+        licenseNumber: s.licenseNumber || '',
+        hasLicense: !!(s.licenseNumber && s.licenseNumber.trim().length > 0) || s.opussChecked === true || s.paid === 'OUI'
+      }));
+    }
   }
 };
 
@@ -96,27 +203,41 @@ export const addStudent = async (student: Omit<Student, "id">): Promise<string> 
     updatedAt: new Date().toISOString()
   });
 
+  // Always mirror to localStorage for instant resilience
+  saveLocalStudent({ ...student, id: newId });
+
   try {
     const { error } = await supabase.from('students').insert(row);
     if (error) {
       console.warn('Supabase addStudent error, falling back to API:', error.message);
+      try {
+        const res = await fetchJson<{ id: string }>(`${API_BASE}/students`, {
+          method: 'POST',
+          body: JSON.stringify(student)
+        });
+        return res.id;
+      } catch {
+        return newId;
+      }
+    }
+    return newId;
+  } catch {
+    try {
       const res = await fetchJson<{ id: string }>(`${API_BASE}/students`, {
         method: 'POST',
         body: JSON.stringify(student)
       });
       return res.id;
+    } catch {
+      return newId;
     }
-    return newId;
-  } catch {
-    const res = await fetchJson<{ id: string }>(`${API_BASE}/students`, {
-      method: 'POST',
-      body: JSON.stringify(student)
-    });
-    return res.id;
   }
 };
 
 export const updateStudent = async (id: string, data: Partial<Student>): Promise<void> => {
+  // Always update local mirror
+  updateLocalStudent(id, data);
+
   const row = studentToRow({
     ...data,
     updatedAt: new Date().toISOString()
@@ -126,56 +247,86 @@ export const updateStudent = async (id: string, data: Partial<Student>): Promise
     const { error } = await supabase.from('students').update(row).eq('id', id);
     if (error) {
       console.warn('Supabase updateStudent error, falling back to API:', error.message);
+      try {
+        await fetchJson(`${API_BASE}/students/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          body: JSON.stringify(data)
+        });
+      } catch {
+        // Handled by local storage
+      }
+    }
+  } catch {
+    try {
       await fetchJson(`${API_BASE}/students/${encodeURIComponent(id)}`, {
         method: 'PUT',
         body: JSON.stringify(data)
       });
+    } catch {
+      // Handled by local storage
     }
-  } catch {
-    await fetchJson(`${API_BASE}/students/${encodeURIComponent(id)}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
   }
 };
 
 export const deleteStudent = async (id: string): Promise<void> => {
+  deleteLocalStudent(id);
+
   try {
     const { error } = await supabase.from('students').delete().eq('id', id);
     if (error) {
       console.warn('Supabase deleteStudent error, falling back to API:', error.message);
+      try {
+        await fetchJson(`${API_BASE}/students/${encodeURIComponent(id)}`, {
+          method: 'DELETE'
+        });
+      } catch {
+        // Handled by local storage
+      }
+    }
+  } catch {
+    try {
       await fetchJson(`${API_BASE}/students/${encodeURIComponent(id)}`, {
         method: 'DELETE'
       });
+    } catch {
+      // Handled by local storage
     }
-  } catch {
-    await fetchJson(`${API_BASE}/students/${encodeURIComponent(id)}`, {
-      method: 'DELETE'
-    });
   }
 };
 
 export const deleteMultipleStudents = async (ids: string[]): Promise<void> => {
   if (!ids || ids.length === 0) return;
+  deleteMultipleLocalStudents(ids);
+
   try {
     const { error } = await supabase.from('students').delete().in('id', ids);
     if (error) {
       console.warn('Supabase deleteMultipleStudents error, falling back to API:', error.message);
+      try {
+        await fetchJson(`${API_BASE}/students/batch-delete`, {
+          method: 'POST',
+          body: JSON.stringify({ ids })
+        });
+      } catch {
+        // Handled by local storage
+      }
+    }
+  } catch {
+    try {
       await fetchJson(`${API_BASE}/students/batch-delete`, {
         method: 'POST',
         body: JSON.stringify({ ids })
       });
+    } catch {
+      // Handled by local storage
     }
-  } catch {
-    await fetchJson(`${API_BASE}/students/batch-delete`, {
-      method: 'POST',
-      body: JSON.stringify({ ids })
-    });
   }
 };
 
 export const updateMultipleStudents = async (ids: string[], data: Partial<Student>): Promise<void> => {
   if (!ids || ids.length === 0) return;
+  updateMultipleLocalStudents(ids, data);
+
   const row = studentToRow({
     ...data,
     updatedAt: new Date().toISOString()
@@ -185,22 +336,33 @@ export const updateMultipleStudents = async (ids: string[], data: Partial<Studen
     const { error } = await supabase.from('students').update(row).in('id', ids);
     if (error) {
       console.warn('Supabase updateMultipleStudents error, falling back to API:', error.message);
+      try {
+        await fetchJson(`${API_BASE}/students/batch-update`, {
+          method: 'POST',
+          body: JSON.stringify({ ids, data })
+        });
+      } catch {
+        // Handled by local storage
+      }
+    }
+  } catch {
+    try {
       await fetchJson(`${API_BASE}/students/batch-update`, {
         method: 'POST',
         body: JSON.stringify({ ids, data })
       });
+    } catch {
+      // Handled by local storage
     }
-  } catch {
-    await fetchJson(`${API_BASE}/students/batch-update`, {
-      method: 'POST',
-      body: JSON.stringify({ ids, data })
-    });
   }
 };
 
 export const batchUpsertStudentsApi = async (students: Partial<Student>[], schoolYear: string): Promise<number> => {
   if (!students || students.length === 0) return 0;
   
+  // Save directly to localStorage first so UI reflects imports immediately
+  batchSaveLocalStudents(students, schoolYear);
+
   const now = new Date().toISOString();
   const rows = students.map(s => {
     const r = studentToRow({
@@ -217,19 +379,27 @@ export const batchUpsertStudentsApi = async (students: Partial<Student>[], schoo
     const { error } = await supabase.from('students').upsert(rows);
     if (error) {
       console.warn('Supabase batchUpsert error, falling back to API:', error.message);
+      try {
+        const res = await fetchJson<{ success: boolean; count: number }>(`${API_BASE}/students/batch-upsert`, {
+          method: 'POST',
+          body: JSON.stringify({ students, schoolYear })
+        });
+        return res.count;
+      } catch {
+        return rows.length;
+      }
+    }
+    return rows.length;
+  } catch {
+    try {
       const res = await fetchJson<{ success: boolean; count: number }>(`${API_BASE}/students/batch-upsert`, {
         method: 'POST',
         body: JSON.stringify({ students, schoolYear })
       });
       return res.count;
+    } catch {
+      return rows.length;
     }
-    return rows.length;
-  } catch {
-    const res = await fetchJson<{ success: boolean; count: number }>(`${API_BASE}/students/batch-upsert`, {
-      method: 'POST',
-      body: JSON.stringify({ students, schoolYear })
-    });
-    return res.count;
   }
 };
 
@@ -622,23 +792,34 @@ export const deleteStaffAttendanceApi = async (id: string): Promise<void> => {
 export const getAppSetting = async <T = any>(key: string, defaultValue?: T): Promise<T | null> => {
   try {
     const { data, error } = await supabase.from('app_settings').select('value').eq('key', key).single();
-    if (error || !data) return defaultValue !== undefined ? defaultValue : null;
+    if (error || !data) {
+      const localVal = getLocalSetting<T>(key, defaultValue !== undefined ? defaultValue : (null as unknown as T));
+      return localVal;
+    }
     try {
-      return JSON.parse(data.value);
+      const parsed = JSON.parse(data.value);
+      saveLocalSetting(key, parsed);
+      return parsed;
     } catch {
+      saveLocalSetting(key, data.value);
       return data.value as unknown as T;
     }
   } catch {
     try {
       const res = await fetchJson<T>(`${API_BASE}/settings/${encodeURIComponent(key)}`);
-      return res !== null && res !== undefined ? res : (defaultValue !== undefined ? defaultValue : null);
+      if (res !== null && res !== undefined) {
+        saveLocalSetting(key, res);
+        return res;
+      }
     } catch {
-      return defaultValue !== undefined ? defaultValue : null;
+      // ignore
     }
+    return getLocalSetting<T>(key, defaultValue !== undefined ? defaultValue : (null as unknown as T));
   }
 };
 
 export const saveAppSetting = async <T = any>(key: string, value: T): Promise<void> => {
+  saveLocalSetting(key, value);
   const strValue = typeof value === 'string' ? value : JSON.stringify(value);
   try {
     const { error } = await supabase.from('app_settings').upsert({
@@ -648,10 +829,14 @@ export const saveAppSetting = async <T = any>(key: string, value: T): Promise<vo
     });
     if (error) throw error;
   } catch {
-    await fetchJson(`${API_BASE}/settings/${encodeURIComponent(key)}`, {
-      method: 'POST',
-      body: JSON.stringify(value)
-    });
+    try {
+      await fetchJson(`${API_BASE}/settings/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        body: JSON.stringify(value)
+      });
+    } catch {
+      // Handled by local storage
+    }
   }
 };
 
@@ -660,9 +845,13 @@ export const deleteAppSetting = async (key: string): Promise<void> => {
     const { error } = await supabase.from('app_settings').delete().eq('key', key);
     if (error) throw error;
   } catch {
-    await fetchJson(`${API_BASE}/settings/${encodeURIComponent(key)}`, {
-      method: 'DELETE'
-    });
+    try {
+      await fetchJson(`${API_BASE}/settings/${encodeURIComponent(key)}`, {
+        method: 'DELETE'
+      });
+    } catch {
+      // ignore
+    }
   }
 };
 
@@ -670,19 +859,55 @@ export const deleteAppSetting = async (key: string): Promise<void> => {
 // BACKUP & RESET
 // ----------------------------------------------------
 export const fetchBackup = async (): Promise<Record<string, any[]>> => {
-  return fetchJson<Record<string, any[]>>(`${API_BASE}/backup`);
+  try {
+    return await fetchJson<Record<string, any[]>>(`${API_BASE}/backup`);
+  } catch {
+    return {
+      students: getLocalStudents(),
+      teachers: getLocalTeachers(),
+      sessions: getLocalSessions(),
+      convocations: getLocalConvocations(),
+      evening_slots: getLocalEveningSlots(),
+      staff_members: getLocalStaffMembers(),
+      staff_attendance: getLocalStaffAttendance()
+    };
+  }
 };
 
 export const restoreBackup = async (data: Record<string, any[]>): Promise<void> => {
-  await fetchJson(`${API_BASE}/restore`, {
-    method: 'POST',
-    body: JSON.stringify(data)
-  });
+  // Always update local storage so data is restored immediately
+  restoreBackupToLocalStorage(data);
+
+  try {
+    await fetchJson(`${API_BASE}/restore`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  } catch {
+    // If running on static host like Vercel without Express, local storage is the persistence layer
+  }
 };
 
 export const resetDatabaseApi = async (type: 'calendar' | 'all'): Promise<void> => {
-  await fetchJson(`${API_BASE}/reset`, {
-    method: 'POST',
-    body: JSON.stringify({ type })
-  });
+  if (type === 'all') {
+    setLocalStudents([]);
+    setLocalSessions([]);
+    setLocalConvocations([]);
+    setLocalEveningSlots([]);
+    setLocalStaffMembers([]);
+    setLocalStaffAttendance([]);
+  } else if (type === 'calendar') {
+    setLocalSessions([]);
+    setLocalConvocations([]);
+    setLocalEveningSlots([]);
+  }
+
+  try {
+    await fetchJson(`${API_BASE}/reset`, {
+      method: 'POST',
+      body: JSON.stringify({ type })
+    });
+  } catch {
+    // Handled by local storage
+  }
 };

@@ -244,7 +244,12 @@ export default function App() {
       setStudents(data);
       if (data.length > 0) {
         const years = Array.from(new Set(data.map(s => s.schoolYear).filter(Boolean))).sort().reverse();
-        setActiveYear(prev => (years.includes(prev) ? prev : years[0]));
+        // If current activeYear has no students, automatically switch to the most populated year
+        setActiveYear(prev => {
+          const currentYearCount = data.filter(s => s.schoolYear === prev).length;
+          if (currentYearCount > 0) return prev;
+          return years[0] || prev;
+        });
       }
     } catch (err) {
       console.error("Fetch students error:", err);
@@ -870,8 +875,9 @@ export default function App() {
         onClose={() => setIsImportModalOpen(false)}
         activeYear={activeYear}
         students={students}
-        onSuccess={() => {
-          // Success handled in the component (alerts or just closes)
+        onSuccess={async () => {
+          await fetchStudents();
+          setCurrentTab('eleves');
         }}
       />
 

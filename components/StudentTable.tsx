@@ -112,8 +112,11 @@ export const StudentTable: React.FC<StudentTableProps> = ({
               <tr>
                 <td colSpan={columns.filter(c => c.visible).length + 1} className="p-12 text-center text-gray-500">
                   <div className="flex flex-col items-center justify-center space-y-3">
-                    <CalendarDays className="w-10 h-10 text-slate-300" />
-                    <span>Aucun élève trouvé.</span>
+                    <CalendarDays className="w-12 h-12 text-slate-300" />
+                    <span className="text-base font-semibold text-slate-700">Aucun élève trouvé pour cette année ou ce filtre.</span>
+                    <p className="text-xs text-slate-400 max-w-sm">
+                      Vérifiez l'année scolaire sélectionnée en haut à droite, ou importez votre fichier Pronote / UNSS via le bouton « Importer (CSV) ».
+                    </p>
                   </div>
                 </td>
               </tr>
