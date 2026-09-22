@@ -97,7 +97,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
 
   const toggleEnrollment = async (studentId: string) => {
     if (!activeSession) return;
-    const enrolled = new Set(activeSession.enrolledStudentIds || []);
+    const enrolled = new Set<string>(activeSession.enrolledStudentIds || []);
     if (enrolled.has(studentId)) {
       enrolled.delete(studentId);
     } else {
@@ -105,7 +105,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
     }
     
     // Also remove from present if un-enrolled
-    const present = new Set(activeSession.presentStudentIds || []);
+    const present = new Set<string>(activeSession.presentStudentIds || []);
     if (!enrolled.has(studentId) && present.has(studentId)) {
       present.delete(studentId);
     }
@@ -132,7 +132,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
 
   const toggleAttendance = async (studentId: string) => {
     if (!activeSession) return;
-    const present = new Set(activeSession.presentStudentIds || []);
+    const present = new Set<string>(activeSession.presentStudentIds || []);
     if (present.has(studentId)) {
       present.delete(studentId);
     } else {

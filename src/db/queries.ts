@@ -104,7 +104,7 @@ export async function insertStudent(student: Omit<Student, 'id'> & { id?: string
       isAdult: !!student.isAdult,
       createdAt: now,
       updatedAt: now
-    });
+    } as any);
     return id;
   } catch (error) {
     console.error("Failed to insert student:", error);

@@ -14,6 +14,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (id === 'AS Rosa Parks' && password === 'Rostrenn2026-2027') {
+      localStorage.setItem('as_auth_token', 'admin-secret-passkey');
       onLogin();
     } else {
       setError('Identifiant ou mot de passe incorrect.');

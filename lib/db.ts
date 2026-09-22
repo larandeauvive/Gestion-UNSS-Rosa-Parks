@@ -59,7 +59,7 @@ export const getPublicDirectory = async (schoolYear: string): Promise<PublicStud
   try {
     const { data, error } = await supabase
       .from('students')
-      .select('id, last_name, first_name, class_group, school_year, is_adult, license_number, opuss_checked, paid')
+      .select('id, last_name, first_name, class_group, school_year, is_adult, license_number, opuss_checked, paid, parental_auth, swimming_certificate, image_rights')
       .eq('school_year', schoolYear)
       .order('last_name', { ascending: true });
 
@@ -75,6 +75,11 @@ export const getPublicDirectory = async (schoolYear: string): Promise<PublicStud
       classGroup: row.class_group ?? '',
       schoolYear: row.school_year ?? '',
       isAdult: row.is_adult ?? false,
+      paid: row.paid ?? 'NON',
+      parentalAuth: row.parental_auth ?? 'NON',
+      swimmingCertificate: row.swimming_certificate ?? 'NON',
+      imageRights: row.image_rights ?? 'NON',
+      licenseNumber: row.license_number ?? '',
       hasLicense: !!(row.license_number && row.license_number.trim().length > 0) || row.opuss_checked === true || row.paid === 'OUI'
     }));
   } catch {
@@ -614,10 +619,10 @@ export const deleteStaffAttendanceApi = async (id: string): Promise<void> => {
 // ----------------------------------------------------
 // SETTINGS & REGISTRATION FORM (Supabase app_settings)
 // ----------------------------------------------------
-export const getAppSetting = async <T = any>(key: string, defaultValue: T): Promise<T> => {
+export const getAppSetting = async <T = any>(key: string, defaultValue?: T): Promise<T | null> => {
   try {
     const { data, error } = await supabase.from('app_settings').select('value').eq('key', key).single();
-    if (error || !data) return defaultValue;
+    if (error || !data) return defaultValue !== undefined ? defaultValue : null;
     try {
       return JSON.parse(data.value);
     } catch {
@@ -626,9 +631,9 @@ export const getAppSetting = async <T = any>(key: string, defaultValue: T): Prom
   } catch {
     try {
       const res = await fetchJson<T>(`${API_BASE}/settings/${encodeURIComponent(key)}`);
-      return res !== null && res !== undefined ? res : defaultValue;
+      return res !== null && res !== undefined ? res : (defaultValue !== undefined ? defaultValue : null);
     } catch {
-      return defaultValue;
+      return defaultValue !== undefined ? defaultValue : null;
     }
   }
 };

@@ -190,7 +190,7 @@ export default function App() {
   };
   
   // View State
-  const [activeYear, setActiveYear] = useState<string>('2025-2026');
+  const [activeYear, setActiveYear] = useState<string>('2026-2027');
   
   const [currentTab, setCurrentTab] = useState<'eleves'|'convocations'|'dashboard'|'seances'|'calendrier'|'personnel'>('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
@@ -244,16 +244,14 @@ export default function App() {
       setStudents(data);
       if (data.length > 0) {
         const years = Array.from(new Set(data.map(s => s.schoolYear).filter(Boolean))).sort().reverse();
-        if (years.length > 0 && !years.includes(activeYear)) {
-          setActiveYear(years[0]);
-        }
+        setActiveYear(prev => (years.includes(prev) ? prev : years[0]));
       }
     } catch (err) {
       console.error("Fetch students error:", err);
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, isPublicTeacher, activeYear]);
+  }, [isAuthenticated, isPublicTeacher]);
 
   useEffect(() => {
     fetchStudents();
@@ -546,6 +544,7 @@ export default function App() {
                 <button 
                   onClick={() => {
                     localStorage.removeItem('as_auth');
+                    localStorage.removeItem('as_auth_token');
                     setIsAuthenticated(false);
                   }}
                   className="p-1.5 text-slate-400 hover:text-red-400 rounded-md hover:bg-slate-700 transition-colors focus:outline-none"
