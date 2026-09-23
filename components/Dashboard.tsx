@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Convocation, Session, Student } from '../types';
 import { Activity, Users, Trophy, TrendingUp, Percent, UserCheck, PieChart, Settings } from 'lucide-react';
 import { getConvocationsList, getSessionsList } from '../lib/db';
+import { normalizeGender } from '../lib/utils';
 
 interface Props {
   students: Student[];
@@ -39,6 +40,16 @@ export const Dashboard: React.FC<Props> = ({ students, activeYear, onNewConvocat
     fetchData();
   }, [activeYear]);
 
+  // Filtrer les élèves de l'année active (toujours appelé avant tout return conditionnel)
+  const yearStudents = useMemo(() => {
+    return students.filter(s => !s.schoolYear || s.schoolYear === activeYear);
+  }, [students, activeYear]);
+
+  // Élèves licenciés (avec un numéro de licence renseigné)
+  const licensedStudentsList = useMemo(() => {
+    return yearStudents.filter(s => !!(s.licenseNumber && s.licenseNumber.trim() !== ''));
+  }, [yearStudents]);
+
   if (loading) {
     return <div className="text-center py-20 text-slate-500 font-medium">Chargement des statistiques...</div>;
   }
@@ -52,23 +63,27 @@ export const Dashboard: React.FC<Props> = ({ students, activeYear, onNewConvocat
   };
 
   // Statistiques Générales
-  const totalStudents = students.length;
-  const licensedStudents = students.filter(s => s.licenseNumber && s.licenseNumber.trim() !== '').length;
-  const paidStudents = students.filter(s => s.paid === 'OUI').length;
+  const totalStudents = yearStudents.length;
+  const licensedStudents = licensedStudentsList.length;
+  const paidStudents = yearStudents.filter(s => s.paid === 'OUI').length;
   
   // Taux de pénétration (% d'élèves du lycée licenciés à l'AS)
   const penetrationRate = schoolTotal > 0 ? ((licensedStudents / schoolTotal) * 100).toFixed(1) : '0';
 
-  // Répartition Filles / Garçons
-  const femaleStudents = students.filter(s => s.gender === 'F').length;
-  const maleStudents = students.filter(s => s.gender === 'M').length;
-  const otherGender = totalStudents - femaleStudents - maleStudents;
-  const femalePercentage = totalStudents > 0 ? Math.round((femaleStudents / totalStudents) * 100) : 0;
-  const malePercentage = totalStudents > 0 ? Math.round((maleStudents / totalStudents) * 100) : 0;
+  // Répartition Filles / Garçons normalisée UNIQUEMENT sur les élèves licenciés
+  const femaleLicensedStudents = licensedStudentsList.filter(s => normalizeGender(s.gender) === 'F').length;
+  const maleLicensedStudents = licensedStudentsList.filter(s => normalizeGender(s.gender) === 'M').length;
+  const specifiedGenderLicensedTotal = femaleLicensedStudents + maleLicensedStudents;
+  const unassignedGenderLicensed = licensedStudents - specifiedGenderLicensedTotal;
+
+  // Pourcentages basés sur le total des licenciés
+  const baseLicensedTotal = specifiedGenderLicensedTotal > 0 ? specifiedGenderLicensedTotal : licensedStudents;
+  const femalePercentage = baseLicensedTotal > 0 ? Math.round((femaleLicensedStudents / baseLicensedTotal) * 100) : 0;
+  const malePercentage = baseLicensedTotal > 0 ? 100 - femalePercentage : 0;
 
   // Répartition par Niveau / Classe
   const levelCounts: Record<string, number> = {};
-  students.forEach(s => {
+  yearStudents.forEach(s => {
     let level = 'Autre';
     const c = (s.classGroup || '').toUpperCase();
     if (c.includes('2') || c.includes('SECONDE')) level = '2nde';
@@ -184,17 +199,22 @@ export const Dashboard: React.FC<Props> = ({ students, activeYear, onNewConvocat
 
       {/* Deux Colonnes : Genre / Mixité & Niveaux */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Mixité Filles / Garçons */}
+        {/* Mixité Filles / Garçons (Licenciés) */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
-          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <PieChart className="w-4 h-4 text-indigo-600" /> Mixité & Répartition des genres
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+              <PieChart className="w-4 h-4 text-indigo-600" /> Mixité des Licenciés
+            </h3>
+            <span className="text-xs font-semibold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
+              {licensedStudents} licencié{licensedStudents > 1 ? 's' : ''}
+            </span>
+          </div>
 
           <div className="space-y-4">
             <div>
               <div className="flex justify-between text-sm font-bold mb-1.5">
-                <span className="text-rose-600">Filles : {femaleStudents} ({femalePercentage}%)</span>
-                <span className="text-blue-600">Garçons : {maleStudents} ({malePercentage}%)</span>
+                <span className="text-rose-600">Filles : {femaleLicensedStudents} ({femalePercentage}%)</span>
+                <span className="text-blue-600">Garçons : {maleLicensedStudents} ({malePercentage}%)</span>
               </div>
               <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
                 <div 
@@ -212,16 +232,22 @@ export const Dashboard: React.FC<Props> = ({ students, activeYear, onNewConvocat
               <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-100">
                 <p className="text-xs text-rose-700 font-semibold">Licenciées Filles</p>
                 <p className="text-lg font-black text-rose-900 mt-0.5">
-                  {students.filter(s => s.gender === 'F' && s.licenseNumber).length}
+                  {femaleLicensedStudents}
                 </p>
               </div>
               <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100">
                 <p className="text-xs text-blue-700 font-semibold">Licenciés Garçons</p>
                 <p className="text-lg font-black text-blue-900 mt-0.5">
-                  {students.filter(s => s.gender === 'M' && s.licenseNumber).length}
+                  {maleLicensedStudents}
                 </p>
               </div>
             </div>
+
+            {unassignedGenderLicensed > 0 && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
+                ⚠️ Genre non renseigné pour {unassignedGenderLicensed} élève{unassignedGenderLicensed > 1 ? 's' : ''} licencié{unassignedGenderLicensed > 1 ? 's' : ''}.
+              </p>
+            )}
           </div>
         </div>
 

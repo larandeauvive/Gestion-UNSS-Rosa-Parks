@@ -28,3 +28,13 @@ export function formatDateFr(dateStr: string | boolean | undefined): string {
   
   return str;
 }
+
+export function normalizeGender(val: unknown): 'M' | 'F' | '' {
+  if (!val || typeof val !== 'string') return '';
+  const clean = val.trim().toUpperCase();
+  if (['F', 'FILLE', 'FEMININ', 'FÉMININ', 'FEMME', 'WOMAN', 'GIRL', '2'].includes(clean)) return 'F';
+  if (['M', 'G', 'GARCON', 'GARÇON', 'MASCULIN', 'HOMME', 'MAN', 'BOY', '1'].includes(clean)) return 'M';
+  if (clean.startsWith('F')) return 'F';
+  if (clean.startsWith('M') || clean.startsWith('G')) return 'M';
+  return '';
+}

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { Upload, X, Check, FileSpreadsheet, Loader2, Play, Users, ArrowRight } from 'lucide-react';
 import { Student } from '../types';
-import { formatDateFr } from '../lib/utils';
+import { formatDateFr, normalizeGender } from '../lib/utils';
 import { batchUpsertStudentsApi, deleteMultipleStudents, updateStudent } from '../lib/db';
 
 interface ImportWizardProps {
@@ -171,7 +171,7 @@ export const ImportWizard: React.FC<ImportWizardProps> = ({ isOpen, onClose, act
           imageRights: imageRights ? (row[imageRights] || '') : (existingStudent?.imageRights || ''),
           tshirt: tshirt ? (row[tshirt] || '') : (existingStudent?.tshirt || ''),
           size: size ? (row[size] || '') : (existingStudent?.size || ''),
-          gender: gender ? (row[gender] || '') : (existingStudent?.gender || ''),
+          gender: gender ? (normalizeGender(row[gender]) || existingStudent?.gender || '') : (existingStudent?.gender || ''),
           swimmingCertificate: swimmingCertificate ? (row[swimmingCertificate] || 'NON') : (existingStudent?.swimmingCertificate || 'NON')
         },
         isDuplicate: !!existingStudent,

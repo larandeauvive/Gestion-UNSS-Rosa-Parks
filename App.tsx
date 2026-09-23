@@ -722,7 +722,7 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => {
-                        setNewMember({ isAdult: true, schoolYear: activeYear, paid: 'NON', parentalAuth: 'NON', imageRights: 'NON', swimmingCertificate: 'NON' });
+                        setNewMember({ isAdult: false, schoolYear: activeYear, gender: 'M', paid: 'NON', parentalAuth: 'NON', imageRights: 'NON', swimmingCertificate: 'NON' });
                         setIsAddMemberModalOpen(true);
                       }}
                       className="flex justify-center items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-2 px-3 rounded-lg font-medium transition-colors border border-indigo-200"
@@ -1040,8 +1040,25 @@ export default function App() {
                   <input type="text" value={newMember.classGroup || ''} onChange={e => setNewMember({...newMember, classGroup: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="Ex: 6A, Adulte..." />
                 </div>
                 <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Genre / Sexe</label>
+                  <select 
+                    value={newMember.gender || 'M'} 
+                    onChange={e => setNewMember({...newMember, gender: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg bg-white"
+                  >
+                    <option value="M">Garçon (M)</option>
+                    <option value="F">Fille (F)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1">Date de naissance</label>
                   <input type="text" value={newMember.birthDate || ''} onChange={e => setNewMember({...newMember, birthDate: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="JJ/MM/AAAA" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">N° Chèque (si paiement)</label>
+                  <input type="text" value={newMember.checkNumber || ''} onChange={e => setNewMember({...newMember, checkNumber: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="Ex: 1234567" />
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4">

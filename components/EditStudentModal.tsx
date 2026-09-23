@@ -34,6 +34,7 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
     setIsSaving(true);
     try {
       await updateStudent(student.id, {
+        gender: formData.gender || 'M',
         paid: formData.paid || 'NON',
         paymentMethod: formData.paymentMethod || '',
         checkNumber: formData.checkNumber || '',
@@ -97,7 +98,21 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
           </div>
 
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Genre / Sexe
+                </label>
+                <select
+                  value={formData.gender || 'M'}
+                  onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="M">Garçon (M)</option>
+                  <option value="F">Fille (F)</option>
+                </select>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
                   Classe
@@ -112,12 +127,40 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Date de naissance
+                </label>
+                <input
+                  type="text"
+                  value={formData.birthDate || ''}
+                  onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
+                  placeholder="JJ/MM/AAAA"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
                   N° Licence
                 </label>
                 <input
                   type="text"
                   value={formData.licenseNumber || ''}
                   onChange={(e) => setFormData({ ...formData, licenseNumber: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  N° de Chèque
+                </label>
+                <input
+                  type="text"
+                  value={formData.checkNumber || ''}
+                  onChange={(e) => setFormData({ ...formData, checkNumber: e.target.value })}
+                  placeholder="Ex: 8492041"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
