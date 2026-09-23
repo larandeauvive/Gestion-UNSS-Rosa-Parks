@@ -45,7 +45,7 @@ const INITIAL_COLUMNS: ColumnDefinition[] = [
   { key: 'swimmingCertificate', label: 'Savoir Nager', visible: false },
   { key: 'parentalAuth', label: 'Auto. Parentale', visible: false },
   { key: 'imageRights', label: 'Droit Image', visible: false },
-  { key: 'opussChecked', label: 'Ajout OPUSS', visible: true },
+  { key: 'opussChecked', label: 'Ajout OPUSS', visible: false },
   { key: 'tshirt', label: 'Maillot', visible: true },
   { key: 'size', label: 'Taille Maillot', visible: true },
 ];

@@ -285,19 +285,6 @@ export const EditStudentModal: React.FC<EditStudentModalProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 pt-2">
-              <input
-                type="checkbox"
-                id="opussChecked"
-                checked={!!formData.opussChecked}
-                onChange={(e) => setFormData({ ...formData, opussChecked: e.target.checked })}
-                className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
-              />
-              <label htmlFor="opussChecked" className="text-sm font-medium text-slate-700">
-                Saisi / Validé sur OPUSS
-              </label>
-            </div>
-
             <div className="flex items-center justify-between pt-6 border-t border-slate-100">
               <button
                 type="button"
