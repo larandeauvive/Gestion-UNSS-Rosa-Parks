@@ -10,7 +10,7 @@ import {
   startOfWeek, endOfWeek, isSameMonth, isSameDay, eachDayOfInterval 
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, X, Printer, Users, FileText, Calendar as CalendarIcon, PlusCircle, Loader2, Share2, Trash2, Edit3, Download, FileUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Printer, Users, FileText, Calendar as CalendarIcon, PlusCircle, Loader2, Share2, Trash2, Edit3, Download, FileUp, ShieldCheck } from 'lucide-react';
 import { RegistrationFormDoc } from '../types';
 import { RegistrationFormModal } from './RegistrationFormModal';
 import { downloadRegistrationForm, formatFileSize } from '../lib/registrationFormHelper';
@@ -54,7 +54,9 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
   const [newEventReturnTime, setNewEventReturnTime] = useState('');
   const [newEventNeedSnack, setNewEventNeedSnack] = useState(false);
   const [newEventDescription, setNewEventDescription] = useState('');
-  const [newEventRequireLicense, setNewEventRequireLicense] = useState(true);
+  const [newEventRequireLicense, setNewEventRequireLicense] = useState(false);
+  const [newEventRequireParentalAuth, setNewEventRequireParentalAuth] = useState(false);
+  const [newEventRequireSwimmingCertificate, setNewEventRequireSwimmingCertificate] = useState(false);
   const [newEventMaxParticipants, setNewEventMaxParticipants] = useState<number | ''>('');
   const [newEventRegistrationOpenDate, setNewEventRegistrationOpenDate] = useState('');
   const [newEventRegistrationCloseDate, setNewEventRegistrationCloseDate] = useState('');
@@ -77,7 +79,9 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     setNewEventReturnTime(session.returnTime || '');
     setNewEventNeedSnack(session.needSnack || false);
     setNewEventDescription(session.description || '');
-    setNewEventRequireLicense(session.requireLicense ?? true);
+    setNewEventRequireLicense(session.requireLicense ?? false);
+    setNewEventRequireParentalAuth(!!session.requireParentalAuth);
+    setNewEventRequireSwimmingCertificate(!!session.requireSwimmingCertificate);
     setNewEventMaxParticipants(session.maxParticipants || '');
     setNewEventRegistrationOpenDate(session.registrationOpenDate || '');
     setNewEventRegistrationCloseDate(session.registrationCloseDate || '');
@@ -181,7 +185,9 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     setNewEventReturnTime('');
     setNewEventNeedSnack(false);
     setNewEventDescription('');
-    setNewEventRequireLicense(true);
+    setNewEventRequireLicense(false);
+    setNewEventRequireParentalAuth(false);
+    setNewEventRequireSwimmingCertificate(false);
     setNewEventMaxParticipants('');
     setNewEventRegistrationOpenDate('');
     setNewEventRegistrationCloseDate('');
@@ -212,6 +218,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           needSnack: newEventNeedSnack,
           description: newEventDescription,
           requireLicense: newEventRequireLicense,
+          requireParentalAuth: newEventRequireParentalAuth,
+          requireSwimmingCertificate: newEventRequireSwimmingCertificate,
           maxParticipants: newEventMaxParticipants ? Number(newEventMaxParticipants) : null,
           registrationOpenDate: newEventRegistrationOpenDate || null,
           registrationCloseDate: newEventRegistrationCloseDate || null,
@@ -249,6 +257,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           needSnack: newEventNeedSnack,
           description: newEventDescription,
           requireLicense: newEventRequireLicense,
+          requireParentalAuth: newEventRequireParentalAuth,
+          requireSwimmingCertificate: newEventRequireSwimmingCertificate,
           maxParticipants: newEventMaxParticipants ? Number(newEventMaxParticipants) : undefined,
           registrationOpenDate: newEventRegistrationOpenDate || undefined,
           registrationCloseDate: newEventRegistrationCloseDate || undefined,
@@ -722,6 +732,25 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                   </span>
                 </div>
                 <h2 className="text-3xl font-black text-slate-900 mt-3 mb-3 tracking-tight">{selectedEvent.title}</h2>
+                {selectedEvent.type === 'session' && (
+                  <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                    {(selectedEvent.raw as Session).requireLicense && (
+                      <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-0.5 rounded-full border border-indigo-200">
+                        🪪 Licence requise
+                      </span>
+                    )}
+                    {(selectedEvent.raw as Session).requireParentalAuth && (
+                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 text-xs font-bold px-2.5 py-0.5 rounded-full border border-amber-200">
+                        📄 AP requise
+                      </span>
+                    )}
+                    {(selectedEvent.raw as Session).requireSwimmingCertificate && (
+                      <span className="inline-flex items-center gap-1 bg-cyan-50 text-cyan-800 text-xs font-bold px-2.5 py-0.5 rounded-full border border-cyan-200">
+                        🏊 Savoir nager requis
+                      </span>
+                    )}
+                  </div>
+                )}
                 <div className="flex flex-col gap-2">
                   {selectedEvent.type === 'session' && (selectedEvent.raw as Session).time && (
                     <p className="text-slate-600 font-semibold text-sm flex items-center gap-2">
@@ -1178,17 +1207,59 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                     </label>
                   </div>
 
-                  <div className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                    <input 
-                      type="checkbox" 
-                      id="requireLicenseCal"
-                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                      checked={newEventRequireLicense}
-                      onChange={e => setNewEventRequireLicense(e.target.checked)}
-                    />
-                    <label htmlFor="requireLicenseCal" className="text-xs font-semibold text-slate-700 cursor-pointer">
-                      Signaler si l'élève n'a pas de licence (non bloquant)
-                    </label>
+                  {/* Éléments nécessaires pour pouvoir s'inscrire */}
+                  <div className="bg-slate-50/90 p-3 sm:p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                        Éléments nécessaires pour pouvoir s'inscrire
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-medium">Contrôle inscription</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <label className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${newEventRequireLicense ? 'bg-indigo-50/80 border-indigo-300 text-indigo-950' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'}`}>
+                        <input 
+                          type="checkbox" 
+                          id="requireLicenseCal"
+                          className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 mt-0.5"
+                          checked={newEventRequireLicense}
+                          onChange={e => setNewEventRequireLicense(e.target.checked)}
+                        />
+                        <div>
+                          <span className="text-xs font-bold block">Numéro de licence</span>
+                          <span className="text-[10px] text-slate-500 leading-tight block">Licence AS obligatoire</span>
+                        </div>
+                      </label>
+
+                      <label className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${newEventRequireParentalAuth ? 'bg-indigo-50/80 border-indigo-300 text-indigo-950' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'}`}>
+                        <input 
+                          type="checkbox" 
+                          id="requireParentalAuthCal"
+                          className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 mt-0.5"
+                          checked={newEventRequireParentalAuth}
+                          onChange={e => setNewEventRequireParentalAuth(e.target.checked)}
+                        />
+                        <div>
+                          <span className="text-xs font-bold block">Autorisation parentale</span>
+                          <span className="text-[10px] text-slate-500 leading-tight block">AP validée exigée</span>
+                        </div>
+                      </label>
+
+                      <label className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${newEventRequireSwimmingCertificate ? 'bg-indigo-50/80 border-indigo-300 text-indigo-950' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'}`}>
+                        <input 
+                          type="checkbox" 
+                          id="requireSwimmingCal"
+                          className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 mt-0.5"
+                          checked={newEventRequireSwimmingCertificate}
+                          onChange={e => setNewEventRequireSwimmingCertificate(e.target.checked)}
+                        />
+                        <div>
+                          <span className="text-xs font-bold block">Savoir nager</span>
+                          <span className="text-[10px] text-slate-500 leading-tight block">Attestation exigée</span>
+                        </div>
+                      </label>
+                    </div>
                   </div>
 
                   {/* Section Inscription en équipe */}

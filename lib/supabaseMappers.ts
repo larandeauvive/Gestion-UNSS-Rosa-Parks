@@ -69,6 +69,8 @@ export function rowToSession(row: any): Session {
     needSnack: row.need_snack ?? row.needSnack ?? false,
     description: row.description,
     requireLicense: row.require_license ?? row.requireLicense ?? false,
+    requireParentalAuth: row.require_parental_auth ?? row.requireParentalAuth ?? false,
+    requireSwimmingCertificate: row.require_swimming_certificate ?? row.requireSwimmingCertificate ?? false,
     schoolYear: row.school_year ?? row.schoolYear,
     enrolledStudentIds: row.enrolled_student_ids ?? row.enrolledStudentIds ?? [],
     presentStudentIds: row.present_student_ids ?? row.presentStudentIds ?? [],
@@ -99,6 +101,8 @@ export function sessionToRow(session: Partial<Session>): any {
   if (session.needSnack !== undefined) row.need_snack = session.needSnack;
   if (session.description !== undefined) row.description = session.description;
   if (session.requireLicense !== undefined) row.require_license = session.requireLicense;
+  if (session.requireParentalAuth !== undefined) row.require_parental_auth = session.requireParentalAuth;
+  if (session.requireSwimmingCertificate !== undefined) row.require_swimming_certificate = session.requireSwimmingCertificate;
   if (session.schoolYear !== undefined) row.school_year = session.schoolYear;
   if (session.enrolledStudentIds !== undefined) row.enrolled_student_ids = session.enrolledStudentIds;
   if (session.presentStudentIds !== undefined) row.present_student_ids = session.presentStudentIds;

@@ -95,7 +95,9 @@ export interface Session {
   teacherIds?: string[]; // Enseignants responsables
   needSnack?: boolean; // Besoin d'un goûter (true/false)
   description?: string; // Informations supplémentaires
-  requireLicense: boolean; // Obligation d'être à jour de sa licence
+  requireLicense: boolean; // Obligation d'avoir un numéro de licence valide
+  requireParentalAuth?: boolean; // Obligation d'avoir l'autorisation parentale
+  requireSwimmingCertificate?: boolean; // Obligation d'avoir l'attestation savoir nager
   name: string; // Nom de la séance (ex: "Entraînement Mercredi")
   schoolYear: string;
   enrolledStudentIds: string[]; // Élèves inscrits

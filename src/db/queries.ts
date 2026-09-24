@@ -300,6 +300,8 @@ export async function getSessions(schoolYear?: string): Promise<Session[]> {
       needSnack: !!r.needSnack,
       description: r.description ?? undefined,
       requireLicense: !!r.requireLicense,
+      requireParentalAuth: !!r.requireParentalAuth,
+      requireSwimmingCertificate: !!r.requireSwimmingCertificate,
       enrolledStudentIds: r.enrolledStudentIds ?? [],
       presentStudentIds: r.presentStudentIds ?? [],
       convocationId: r.convocationId ?? undefined,
@@ -334,6 +336,8 @@ export async function getSessionById(id: string): Promise<Session | null> {
       needSnack: !!r.needSnack,
       description: r.description ?? undefined,
       requireLicense: !!r.requireLicense,
+      requireParentalAuth: !!r.requireParentalAuth,
+      requireSwimmingCertificate: !!r.requireSwimmingCertificate,
       enrolledStudentIds: r.enrolledStudentIds ?? [],
       presentStudentIds: r.presentStudentIds ?? [],
       convocationId: r.convocationId ?? undefined,
@@ -369,6 +373,8 @@ export async function createSession(data: Omit<Session, 'id'> & { id?: string })
       needSnack: !!data.needSnack,
       description: data.description || null,
       requireLicense: !!data.requireLicense,
+      requireParentalAuth: !!data.requireParentalAuth,
+      requireSwimmingCertificate: !!data.requireSwimmingCertificate,
       schoolYear: data.schoolYear,
       enrolledStudentIds: data.enrolledStudentIds || [],
       presentStudentIds: data.presentStudentIds || [],
@@ -404,6 +410,8 @@ export async function updateSessionById(id: string, data: Partial<Session>): Pro
     if (data.needSnack !== undefined) payload.needSnack = data.needSnack;
     if (data.description !== undefined) payload.description = data.description;
     if (data.requireLicense !== undefined) payload.requireLicense = data.requireLicense;
+    if (data.requireParentalAuth !== undefined) payload.requireParentalAuth = data.requireParentalAuth;
+    if (data.requireSwimmingCertificate !== undefined) payload.requireSwimmingCertificate = data.requireSwimmingCertificate;
     if (data.schoolYear !== undefined) payload.schoolYear = data.schoolYear;
     if (data.enrolledStudentIds !== undefined) payload.enrolledStudentIds = data.enrolledStudentIds;
     if (data.presentStudentIds !== undefined) payload.presentStudentIds = data.presentStudentIds;

@@ -213,6 +213,8 @@ export function saveLocalSession(session: Partial<Session>): Session {
     needSnack: session.needSnack ?? false,
     description: session.description,
     requireLicense: session.requireLicense ?? false,
+    requireParentalAuth: session.requireParentalAuth ?? false,
+    requireSwimmingCertificate: session.requireSwimmingCertificate ?? false,
     schoolYear: session.schoolYear || '2026-2027',
     enrolledStudentIds: session.enrolledStudentIds || [],
     presentStudentIds: session.presentStudentIds || [],

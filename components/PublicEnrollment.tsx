@@ -76,8 +76,29 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
       .slice(0, 10);
   }, [students, teamSearchTerm, selectedTeamStudents]);
 
+  const getMissingRequirements = (st: PublicStudent): string[] => {
+    if (!session) return [];
+    const missing: string[] = [];
+    if (session.requireLicense && (!st.licenseNumber || st.licenseNumber.trim().length === 0)) {
+      missing.push('Numéro de licence AS manquant');
+    }
+    if (session.requireParentalAuth && String(st.parentalAuth).toUpperCase() !== 'OUI') {
+      missing.push('Autorisation parentale non validée');
+    }
+    if (session.requireSwimmingCertificate && String(st.swimmingCertificate).toUpperCase() !== 'OUI') {
+      missing.push('Attestation savoir nager non validée');
+    }
+    return missing;
+  };
+
   const handleEnroll = async (student: PublicStudent) => {
     if (!session) return;
+
+    const missing = getMissingRequirements(student);
+    if (missing.length > 0) {
+      alert(`Inscription impossible pour ${student.firstName} ${student.lastName} :\n- ${missing.join('\n- ')}\n\nVeuillez régulariser votre dossier auprès des professeurs d'EPS.`);
+      return;
+    }
 
     setEnrollingId(student.id);
     try {
@@ -106,6 +127,11 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
       alert(`Votre équipe est déjà complète (${requiredSize} élèves).`);
       return;
     }
+    const missing = getMissingRequirements(student);
+    if (missing.length > 0) {
+      alert(`Impossible d'ajouter ${student.firstName} ${student.lastName} à l'équipe :\n- ${missing.join('\n- ')}\n\nChaque équipier doit être à jour des éléments requis.`);
+      return;
+    }
     setSelectedTeamStudents(prev => [...prev, student]);
     setTeamSearchTerm('');
   };
@@ -126,6 +152,12 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
 
     if (selectedTeamStudents.length !== requiredSize) {
       alert(`Il faut exactement ${requiredSize} élèves pour valider l'équipe (actuellement ${selectedTeamStudents.length}).`);
+      return;
+    }
+
+    const invalidTeammates = selectedTeamStudents.filter(s => getMissingRequirements(s).length > 0);
+    if (invalidTeammates.length > 0) {
+      alert(`Validation impossible : certains membres ne remplissent pas les conditions requises pour cette séance :\n${invalidTeammates.map(m => `- ${m.firstName} ${m.lastName} : ${getMissingRequirements(m).join(', ')}`).join('\n')}`);
       return;
     }
 

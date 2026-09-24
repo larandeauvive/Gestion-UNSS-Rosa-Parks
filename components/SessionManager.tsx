@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Student, Session } from '../types';
-import { PlusCircle, Calendar, Trash2, CheckCircle2, Circle, Users, Save, Link2, Edit2 } from 'lucide-react';
+import { PlusCircle, Calendar, Trash2, CheckCircle2, Circle, Users, Save, Link2, Edit2, ShieldCheck, AlertCircle } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
 import { 
   getSessionsList, saveSessionApi, deleteSessionApi, 
@@ -63,7 +63,9 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
         await saveSessionApi({
           ...formData,
           schoolYear: activeYear,
-          requireLicense: formData.requireLicense || false,
+          requireLicense: !!formData.requireLicense,
+          requireParentalAuth: !!formData.requireParentalAuth,
+          requireSwimmingCertificate: !!formData.requireSwimmingCertificate,
           isTeamRegistration: !!formData.isTeamRegistration,
           teamSize: formData.isTeamRegistration ? (Number(formData.teamSize) || 4) : undefined
         });
@@ -86,7 +88,9 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
           schoolYear: activeYear,
           enrolledStudentIds: [],
           presentStudentIds: [],
-          requireLicense: newSession.requireLicense || false,
+          requireLicense: !!newSession.requireLicense,
+          requireParentalAuth: !!newSession.requireParentalAuth,
+          requireSwimmingCertificate: !!newSession.requireSwimmingCertificate,
           isTeamRegistration: !!newSession.isTeamRegistration,
           teamSize: newSession.isTeamRegistration ? (Number(newSession.teamSize) || 4) : undefined,
           teams: []
@@ -465,16 +469,59 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                 </div>
               </div>
 
+              {/* Éléments nécessaires pour s'inscrire */}
+              <div className="bg-slate-50/90 p-4 rounded-xl border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                    Éléments nécessaires pour pouvoir s'inscrire
+                  </label>
+                  <span className="text-[11px] text-slate-500 font-medium">Contrôle à l'inscription</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${formData.requireLicense ? 'bg-indigo-50/80 border-indigo-300 text-indigo-950' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'}`}>
+                    <input 
+                      type="checkbox" 
+                      className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 mt-0.5"
+                      checked={formData.requireLicense || false}
+                      onChange={e => setFormData({...formData, requireLicense: e.target.checked})}
+                    />
+                    <div>
+                      <span className="text-xs font-bold block">Numéro de licence</span>
+                      <span className="text-[10px] text-slate-500 leading-tight block">Licence AS obligatoire</span>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${formData.requireParentalAuth ? 'bg-indigo-50/80 border-indigo-300 text-indigo-950' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'}`}>
+                    <input 
+                      type="checkbox" 
+                      className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 mt-0.5"
+                      checked={formData.requireParentalAuth || false}
+                      onChange={e => setFormData({...formData, requireParentalAuth: e.target.checked})}
+                    />
+                    <div>
+                      <span className="text-xs font-bold block">Autorisation parentale</span>
+                      <span className="text-[10px] text-slate-500 leading-tight block">AP validée exigée</span>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${formData.requireSwimmingCertificate ? 'bg-indigo-50/80 border-indigo-300 text-indigo-950' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'}`}>
+                    <input 
+                      type="checkbox" 
+                      className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 mt-0.5"
+                      checked={formData.requireSwimmingCertificate || false}
+                      onChange={e => setFormData({...formData, requireSwimmingCertificate: e.target.checked})}
+                    />
+                    <div>
+                      <span className="text-xs font-bold block">Savoir nager</span>
+                      <span className="text-[10px] text-slate-500 leading-tight block">Attestation requise</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-50 border border-slate-200 rounded-lg">
-                  <input 
-                    type="checkbox" 
-                    className="rounded text-indigo-600 focus:ring-indigo-500 w-5 h-5"
-                    checked={formData.requireLicense || false}
-                    onChange={e => setFormData({...formData, requireLicense: e.target.checked})}
-                  />
-                  <span className="text-sm font-semibold text-slate-700">Signaler si l'élève n'a pas de licence (non bloquant)</span>
-                </label>
                 <label className="flex items-center gap-2 cursor-pointer p-2 bg-amber-50 border border-amber-200 rounded-lg">
                   <input 
                     type="checkbox" 
@@ -587,7 +634,13 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                     </span>
                   )}
                   {activeSession.requireLicense && (
-                    <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full border border-red-200">Licence Obligatoire</span>
+                    <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-0.5 rounded-full border border-indigo-200">🪪 Licence requise</span>
+                  )}
+                  {activeSession.requireParentalAuth && (
+                    <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-0.5 rounded-full border border-amber-200">📄 AP requise</span>
+                  )}
+                  {activeSession.requireSwimmingCertificate && (
+                    <span className="bg-cyan-100 text-cyan-800 text-xs font-bold px-2 py-0.5 rounded-full border border-cyan-200">🏊 Savoir nager requis</span>
                   )}
                   {activeSession.needSnack && (
                     <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-1 rounded-full border border-amber-200">Goûter à prévoir</span>
