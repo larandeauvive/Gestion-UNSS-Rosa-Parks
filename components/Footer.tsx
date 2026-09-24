@@ -63,7 +63,7 @@ export function Footer({ onOpenPrivacy, className = '' }: FooterProps) {
               </ul>
             </div>
 
-            {/* Colonne 3 : Hébergement souverain & Liens */}
+            {/* Colonne 3 : Hébergement & Liens */}
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-white font-semibold text-xs uppercase tracking-wider">
                 <Cloud className="w-4 h-4 text-indigo-400" />
@@ -72,10 +72,10 @@ export function Footer({ onOpenPrivacy, className = '' }: FooterProps) {
               <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700/60 text-slate-400 text-xs space-y-1.5">
                 <div className="flex items-center gap-2 text-slate-200 font-medium">
                   <GitBranch className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Nuage (Apps Éducation) & GitLab</span>
+                  <span>GitLab (Apps Education) & Supabase</span>
                 </div>
                 <p className="text-[11px] leading-tight text-slate-400">
-                  Déploiement sur services institutionnels souverains garantissant l'intégrité et la souveraineté des données scolaires.
+                  Déploiement sur GitLab (Apps Education) et base de données Supabase (conforme RGPD / Union Européenne) garantissant l'intégrité et la sécurité des données scolaires.
                 </p>
               </div>
 

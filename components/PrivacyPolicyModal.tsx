@@ -130,7 +130,7 @@ export function PrivacyPolicyModal({ isOpen, onClose }: PrivacyPolicyModalProps)
             </p>
             <ul className="list-disc pl-5 space-y-1 text-xs">
               <li>
-                <strong className="text-slate-700">Hébergement :</strong> Les services s'appuient sur les environnements sécurisés et souverains dédiés à la communauté éducative (services Nuage / Apps Éducation & forge GitLab académique).
+                <strong className="text-slate-700">Hébergement :</strong> Les services s'appuient sur la forge GitLab (Apps Education) et la base de données Supabase sécurisée et hébergée en Union Européenne (RGPD conforme).
               </li>
               <li>
                 <strong className="text-slate-700">Contrôle d'accès et minimisation stricte (Éducation Nationale) :</strong> L'accès public extérieur est strictement circonscrit au Nom et Prénom uniquement pour la sélection lors de l'inscription aux séances. L'ensemble des autres données personnelles (dates de naissance, coordonnées, classes, suivi financier, attestations médicales et autorisations) est hermétiquement verrouillé et accessible exclusivement par l'administrateur coordonnateur de l'AS.

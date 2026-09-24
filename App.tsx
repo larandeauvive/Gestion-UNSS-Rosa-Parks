@@ -29,6 +29,7 @@ import {
 } from './lib/db';
 import { TeacherPortal } from './components/TeacherPortal';
 import { Footer } from './components/Footer';
+import { getSupabaseConfig, setSupabaseConfig, resetSupabaseConfig, DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY } from './lib/supabaseClient';
 
 const INITIAL_COLUMNS: ColumnDefinition[] = [
   { key: 'lastName', label: 'Nom', visible: true },
@@ -217,6 +218,10 @@ export default function App() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [supabaseCustomUrl, setSupabaseCustomUrl] = useState(() => getSupabaseConfig().url);
+  const [supabaseCustomKey, setSupabaseCustomKey] = useState(() => getSupabaseConfig().anonKey);
+  const [isCustomSupabase, setIsCustomSupabase] = useState(() => getSupabaseConfig().isCustom);
+  const [isEditingSupabaseConfig, setIsEditingSupabaseConfig] = useState(false);
   const [isCopyingSql, setIsCopyingSql] = useState(false);
   const [isSyncingSupabase, setIsSyncingSupabase] = useState(false);
   const [syncSupabaseResult, setSyncSupabaseResult] = useState<{ success?: boolean; message?: string } | null>(null);
@@ -599,10 +604,10 @@ export default function App() {
                       }}
                       className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors text-left border border-emerald-200 mb-2"
                     >
-                      <CloudUpload className="w-4 h-4 text-emerald-600" />
+                      <Database className="w-4 h-4 text-emerald-600" />
                       <div>
-                        <div className="font-semibold text-emerald-900">Transfert Supabase (RGPD)</div>
-                        <div className="text-xs text-emerald-600 font-normal">414 élèves & séances prêts</div>
+                        <div className="font-semibold text-emerald-900">Base de données & Supabase</div>
+                        <div className="text-xs text-emerald-600 font-normal">Clés d'accès, synchro & SQL</div>
                       </div>
                     </button>
                     <button 
@@ -1236,6 +1241,142 @@ export default function App() {
                     {syncSupabaseResult.message}
                   </div>
                 )}
+              </div>
+
+              {/* Option 3 : Clés & Identifiants Supabase (Configuration personnalisée) */}
+              <div className="border border-indigo-200 bg-indigo-50/40 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 text-indigo-950 font-semibold">
+                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white text-xs font-bold">3</span>
+                    Configuration de la base de données Supabase
+                  </div>
+                  {isCustomSupabase ? (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                      Base personnalisée active
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                      Base par défaut (UE)
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+                  Consultez vos identifiants actuels ou saisissez l'URL et la clé anonyme (Anon Key) d'un autre projet Supabase pour basculer d'environnement.
+                </p>
+
+                <div className="space-y-3.5 bg-white p-4 rounded-lg border border-indigo-100 shadow-xs">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Supabase Project URL
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={supabaseCustomUrl}
+                        onChange={(e) => setSupabaseCustomUrl(e.target.value)}
+                        placeholder="https://votre-projet.supabase.co"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(supabaseCustomUrl);
+                          alert("URL Supabase copiée dans le presse-papiers !");
+                        }}
+                        title="Copier l'URL"
+                        className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors shrink-0"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Supabase Anon / Public Key (clé d'accès public)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={supabaseCustomKey}
+                        onChange={(e) => setSupabaseCustomKey(e.target.value)}
+                        placeholder="sb_publishable_... ou eyJhbGciOi..."
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(supabaseCustomKey);
+                          alert("Clé Supabase copiée dans le presse-papiers !");
+                        }}
+                        title="Copier la clé"
+                        className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors shrink-0"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetSupabaseConfig();
+                        setSupabaseCustomUrl(DEFAULT_SUPABASE_URL);
+                        setSupabaseCustomKey(DEFAULT_SUPABASE_ANON_KEY);
+                        setIsCustomSupabase(false);
+                        alert("Configuration réinitialisée aux identifiants par défaut ! La page va s'actualiser.");
+                        window.location.reload();
+                      }}
+                      className="text-xs font-medium text-slate-500 hover:text-rose-600 transition-colors"
+                    >
+                      Restaurer la base par défaut
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!supabaseCustomUrl.trim() || !supabaseCustomKey.trim()) {
+                            alert("Veuillez renseigner une URL et une clé valides.");
+                            return;
+                          }
+                          try {
+                            const { createClient } = await import('@supabase/supabase-js');
+                            const client = createClient(supabaseCustomUrl.trim(), supabaseCustomKey.trim());
+                            const { error } = await client.from('students').select('count', { count: 'exact', head: true });
+                            if (error) {
+                              alert(`Connexion réussie à Supabase mais la table 'students' n'a pas été trouvée (${error.message}). Pensez à exécuter le script SQL.`);
+                            } else {
+                              alert("✅ Connexion réussie à votre base Supabase !");
+                            }
+                          } catch (err: any) {
+                            alert(`Échec du test de connexion : ${err.message}`);
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
+                      >
+                        Tester la connexion
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!supabaseCustomUrl.trim() || !supabaseCustomKey.trim()) {
+                            alert("Veuillez renseigner l'URL et la clé.");
+                            return;
+                          }
+                          setSupabaseConfig(supabaseCustomUrl.trim(), supabaseCustomKey.trim());
+                          setIsCustomSupabase(true);
+                          alert("Nouvelles clés Supabase enregistrées avec succès ! L'application va recharger les données.");
+                          window.location.reload();
+                        }}
+                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors"
+                      >
+                        Enregistrer et appliquer
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
