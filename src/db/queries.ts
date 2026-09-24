@@ -311,6 +311,9 @@ export async function getSessions(schoolYear?: string): Promise<Session[]> {
       returnTime: r.returnTime ?? undefined,
       registrationOpenDate: r.registrationOpenDate ?? undefined,
       registrationCloseDate: r.registrationCloseDate ?? undefined,
+      isTeamRegistration: !!r.isTeamRegistration,
+      teamSize: r.teamSize ?? undefined,
+      teams: (r.teams as any) ?? []
     })) as Session[];
   } catch (error) {
     console.error("Failed to query sessions:", error);
@@ -342,6 +345,9 @@ export async function getSessionById(id: string): Promise<Session | null> {
       returnTime: r.returnTime ?? undefined,
       registrationOpenDate: r.registrationOpenDate ?? undefined,
       registrationCloseDate: r.registrationCloseDate ?? undefined,
+      isTeamRegistration: !!r.isTeamRegistration,
+      teamSize: r.teamSize ?? undefined,
+      teams: (r.teams as any) ?? []
     } as Session;
   } catch (error) {
     console.error("Failed to get session:", error);
@@ -374,7 +380,10 @@ export async function createSession(data: Omit<Session, 'id'> & { id?: string })
       cafeteriaTime: data.cafeteriaTime || null,
       returnTime: data.returnTime || null,
       registrationOpenDate: data.registrationOpenDate || null,
-      registrationCloseDate: data.registrationCloseDate || null
+      registrationCloseDate: data.registrationCloseDate || null,
+      isTeamRegistration: !!data.isTeamRegistration,
+      teamSize: data.teamSize || null,
+      teams: data.teams || []
     });
     return id;
   } catch (error) {
@@ -407,6 +416,9 @@ export async function updateSessionById(id: string, data: Partial<Session>): Pro
     if (data.returnTime !== undefined) payload.returnTime = data.returnTime;
     if (data.registrationOpenDate !== undefined) payload.registrationOpenDate = data.registrationOpenDate;
     if (data.registrationCloseDate !== undefined) payload.registrationCloseDate = data.registrationCloseDate;
+    if (data.isTeamRegistration !== undefined) payload.isTeamRegistration = data.isTeamRegistration;
+    if (data.teamSize !== undefined) payload.teamSize = data.teamSize;
+    if (data.teams !== undefined) payload.teams = data.teams;
 
     await db.update(sessions).set(payload).where(eq(sessions.id, id));
   } catch (error) {

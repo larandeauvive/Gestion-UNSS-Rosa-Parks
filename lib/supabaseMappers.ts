@@ -80,7 +80,10 @@ export function rowToSession(row: any): Session {
     cafeteriaTime: row.cafeteria_time ?? row.cafeteriaTime,
     returnTime: row.return_time ?? row.returnTime,
     registrationOpenDate: row.registration_open_date ?? row.registrationOpenDate,
-    registrationCloseDate: row.registration_close_date ?? row.registrationCloseDate
+    registrationCloseDate: row.registration_close_date ?? row.registrationCloseDate,
+    isTeamRegistration: row.is_team_registration ?? row.isTeamRegistration ?? false,
+    teamSize: row.team_size ?? row.teamSize ?? undefined,
+    teams: Array.isArray(row.teams) ? row.teams : (typeof row.teams === 'string' ? (JSON.parse(row.teams) || []) : (row.teams ?? []))
   };
 }
 
@@ -108,6 +111,9 @@ export function sessionToRow(session: Partial<Session>): any {
   if (session.returnTime !== undefined) row.return_time = session.returnTime;
   if (session.registrationOpenDate !== undefined) row.registration_open_date = session.registrationOpenDate;
   if (session.registrationCloseDate !== undefined) row.registration_close_date = session.registrationCloseDate;
+  if (session.isTeamRegistration !== undefined) row.is_team_registration = session.isTeamRegistration;
+  if (session.teamSize !== undefined) row.team_size = session.teamSize;
+  if (session.teams !== undefined) row.teams = session.teams;
   return row;
 }
 

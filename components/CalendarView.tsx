@@ -58,6 +58,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
   const [newEventMaxParticipants, setNewEventMaxParticipants] = useState<number | ''>('');
   const [newEventRegistrationOpenDate, setNewEventRegistrationOpenDate] = useState('');
   const [newEventRegistrationCloseDate, setNewEventRegistrationCloseDate] = useState('');
+  const [newEventIsTeamRegistration, setNewEventIsTeamRegistration] = useState(false);
+  const [newEventTeamSize, setNewEventTeamSize] = useState<number | ''>(4);
   const [isSavingEvent, setIsSavingEvent] = useState(false);
 
   const [newEventGenerateConvocation, setNewEventGenerateConvocation] = useState(false);
@@ -79,6 +81,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     setNewEventMaxParticipants(session.maxParticipants || '');
     setNewEventRegistrationOpenDate(session.registrationOpenDate || '');
     setNewEventRegistrationCloseDate(session.registrationCloseDate || '');
+    setNewEventIsTeamRegistration(!!session.isTeamRegistration);
+    setNewEventTeamSize(session.teamSize || 4);
     setNewEventGenerateConvocation(!!session.convocationId);
     setClickedDate(new Date(session.date));
     setEditingEventId(event.id);
@@ -140,6 +144,19 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     fetchForm();
   }, []);
 
+  // Gestion de la touche Échap pour fermer immédiatement les fenêtres modales
+  useEffect(() => {
+    if (!isCreatingEvent && !selectedEvent) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsCreatingEvent(false);
+        setSelectedEvent(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCreatingEvent, selectedEvent]);
+
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
   const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
 
@@ -168,6 +185,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
     setNewEventMaxParticipants('');
     setNewEventRegistrationOpenDate('');
     setNewEventRegistrationCloseDate('');
+    setNewEventIsTeamRegistration(false);
+    setNewEventTeamSize(4);
     setNewEventGenerateConvocation(false);
     setEditingEventId(null);
     setIsCreatingEvent(true);
@@ -195,7 +214,9 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           requireLicense: newEventRequireLicense,
           maxParticipants: newEventMaxParticipants ? Number(newEventMaxParticipants) : null,
           registrationOpenDate: newEventRegistrationOpenDate || null,
-          registrationCloseDate: newEventRegistrationCloseDate || null
+          registrationCloseDate: newEventRegistrationCloseDate || null,
+          isTeamRegistration: newEventIsTeamRegistration,
+          teamSize: newEventIsTeamRegistration ? (Number(newEventTeamSize) || 4) : null
         };
         await saveSessionApi({ ...updateData, id: editingEventId });
         
@@ -231,6 +252,9 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           maxParticipants: newEventMaxParticipants ? Number(newEventMaxParticipants) : undefined,
           registrationOpenDate: newEventRegistrationOpenDate || undefined,
           registrationCloseDate: newEventRegistrationCloseDate || undefined,
+          isTeamRegistration: newEventIsTeamRegistration,
+          teamSize: newEventIsTeamRegistration ? (Number(newEventTeamSize) || 4) : undefined,
+          teams: [],
           enrolledStudentIds: [],
           presentStudentIds: [],
           schoolYear: activeYear
@@ -665,9 +689,17 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
 
       {/* Event Details Modal */}
       {selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200 border border-slate-200/50">
-            <div className="p-8 border-b border-slate-100 flex justify-between items-start">
+        <div 
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center p-2 sm:p-4 bg-slate-900/50 backdrop-blur-sm overflow-hidden"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedEvent(null);
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden border border-slate-200/50 animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 sm:p-8 border-b border-slate-100 flex justify-between items-start shrink-0 bg-white">
               <div>
                 <div className="flex flex-wrap items-center gap-3 mb-2">
                   <span className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest
@@ -675,6 +707,11 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                   `}>
                     {selectedEvent.type === 'session' ? 'Séance' : 'Convocation'}
                   </span>
+                  {selectedEvent.type === 'session' && (selectedEvent.raw as Session).isTeamRegistration && (
+                    <span className="px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest bg-purple-100 text-purple-800 border border-purple-200">
+                      🏆 En équipe ({(selectedEvent.raw as Session).teamSize || 4} élèves)
+                    </span>
+                  )}
                   {(selectedEvent.raw as any).targetAudience === 'adults' && (
                     <span className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest rounded-lg bg-rose-100 text-rose-700">
                       Adultes uniquement
@@ -724,7 +761,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
               </button>
             </div>
             
-            <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 bg-slate-50 overscroll-contain">
               {!isPublic && (
                 <>
                   <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 mb-6">
@@ -757,10 +794,66 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                     </div>
                   </div>
                   
+                  {/* Si séance par équipe : Affichage des équipes inscrites */}
+                  {selectedEvent.type === 'session' && (selectedEvent.raw as Session).isTeamRegistration && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold text-slate-800 mb-3 flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-purple-600" />
+                          Équipes enregistrées ({((selectedEvent.raw as Session).teams || []).length})
+                        </span>
+                        <span className="text-xs bg-purple-100 text-purple-800 font-bold px-2.5 py-0.5 rounded-full border border-purple-200">
+                          {(selectedEvent.raw as Session).teamSize || 4} élèves / équipe
+                        </span>
+                      </h3>
+
+                      {((selectedEvent.raw as Session).teams || []).length === 0 ? (
+                        <p className="text-sm text-slate-500 italic p-4 bg-white rounded-xl border border-slate-200 text-center">
+                          Aucune équipe n'est encore inscrite pour cette séance.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {((selectedEvent.raw as Session).teams || []).map((team, tIdx) => (
+                            <div key={team.id || tIdx} className="bg-white p-3.5 rounded-xl border border-purple-100 shadow-xs">
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                                  <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 text-xs flex items-center justify-center font-black">
+                                    {tIdx + 1}
+                                  </span>
+                                  <span>{team.name}</span>
+                                </h4>
+                                <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
+                                  {team.studentIds?.length || 0} / {(selectedEvent.raw as Session).teamSize || 4} élèves
+                                </span>
+                              </div>
+                              <ul className="space-y-1 text-xs text-slate-600">
+                                {(team.studentIds || []).map(sid => {
+                                  const st = students.find(s => s.id === sid);
+                                  return (
+                                    <li key={sid} className="flex items-center justify-between py-0.5 border-b border-slate-50 last:border-b-0">
+                                      <span className="font-medium text-slate-800">
+                                        {st ? `${st.lastName} ${st.firstName}` : sid}
+                                      </span>
+                                      {st?.classGroup && (
+                                        <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
+                                          {st.classGroup}
+                                        </span>
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div>
                     <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
                       <Users className="w-4 h-4 text-slate-400" />
-                      Élèves concernés ({selectedEvent.studentIds.length})
+                      Tous les élèves inscrits ({selectedEvent.studentIds.length})
                     </h3>
                     
                     {selectedEvent.studentIds.length === 0 ? (
@@ -821,13 +914,14 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                     }
                     
                     if (isSession && !isClosed) {
+                      const sess = selectedEvent.raw as Session;
                       return (
                         <button 
                           onClick={() => window.location.href = `?enroll=${selectedEvent.id}`}
-                          className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-colors shadow-sm"
+                          className={`inline-flex items-center gap-2 px-6 py-3 ${sess.isTeamRegistration ? 'bg-purple-600 hover:bg-purple-700 shadow-purple-600/20' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20'} text-white rounded-xl font-bold transition-colors shadow-sm`}
                         >
                           <Users className="w-5 h-5" />
-                          Je m'inscris à cette séance
+                          {sess.isTeamRegistration ? `Inscrire une équipe (${sess.teamSize || 4} élèves)` : "Je m'inscris à cette séance"}
                         </button>
                       );
                     }
@@ -859,7 +953,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
               )}
             </div>
             
-            <div className="p-4 border-t border-slate-100 flex justify-between items-center">
+            <div className="p-4 border-t border-slate-100 flex justify-between items-center shrink-0 bg-white">
               {!isPublic ? (
                 <div className="flex gap-2">
                   {selectedEvent.type === 'session' && (
@@ -897,204 +991,276 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
 
       {/* Create Event Modal */}
       {isCreatingEvent && clickedDate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 animate-in fade-in zoom-in-95 duration-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-              <PlusCircle className="w-5 h-5 text-indigo-600" />
-              {editingEventId ? 'Modifier la Séance' : 'Créer une Séance'}
-            </h2>
+        <div 
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-hidden"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsCreatingEvent(false);
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header fixe toujours visible avec bouton de fermeture croix */}
+            <div className="px-5 py-3.5 sm:px-6 sm:py-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/90">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+                  <PlusCircle className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                    {editingEventId ? 'Modifier la Séance' : 'Créer une Séance'}
+                  </h2>
+                  <p className="text-xs text-indigo-600 font-semibold mt-0.5 capitalize">
+                    {format(clickedDate, 'EEEE d MMMM yyyy', { locale: fr })}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreatingEvent(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors cursor-pointer"
+                title="Fermer la fenêtre (Échap)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
             
-            <form onSubmit={handleCreateEvent} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Date</label>
-                <div className="px-3 py-2 bg-slate-100 rounded-lg text-slate-700 font-medium border border-slate-200">
-                  {format(clickedDate, 'EEEE d MMMM yyyy', { locale: fr })}
+            <form onSubmit={handleCreateEvent} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
+                <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50/60 rounded-lg text-indigo-950 text-xs font-semibold border border-indigo-100">
+                  <CalendarIcon className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span>Date :</span>
+                  <span className="capitalize text-indigo-700 font-bold">{format(clickedDate, 'EEEE d MMMM yyyy', { locale: fr })}</span>
                 </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Nom de la séance</label>
-                <input 
-                  type="text" 
-                  required
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={newEventName}
-                  onChange={e => setNewEventName(e.target.value)}
-                  placeholder="Ex: Entraînement Futsal"
-                  autoFocus
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+                
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Heure de RDV</label>
-                  <input 
-                    type="time" 
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={newEventMeetingTime}
-                    onChange={e => setNewEventMeetingTime(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Lieu de RDV</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Nom de la séance</label>
                   <input 
                     type="text" 
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={newEventMeetingLocation}
-                    onChange={e => setNewEventMeetingLocation(e.target.value)}
-                    placeholder="Ex: Gymnase"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Passage au self</label>
-                  <input 
-                    type="time" 
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={newEventCafeteriaTime}
-                    onChange={e => setNewEventCafeteriaTime(e.target.value)}
-                    title="Heure de passage au self (optionnelle)"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Heure de retour</label>
-                  <input 
-                    type="time" 
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={newEventReturnTime}
-                    onChange={e => setNewEventReturnTime(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Début (Séance)</label>
-                  <input 
-                    type="time" 
                     required
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={newEventTime}
-                    onChange={e => setNewEventTime(e.target.value)}
+                    value={newEventName}
+                    onChange={e => setNewEventName(e.target.value)}
+                    placeholder="Ex: Entraînement Futsal"
+                    autoFocus
                   />
                 </div>
+
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Heure de RDV</label>
+                    <input 
+                      type="time" 
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      value={newEventMeetingTime}
+                      onChange={e => setNewEventMeetingTime(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Lieu de RDV</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      value={newEventMeetingLocation}
+                      onChange={e => setNewEventMeetingLocation(e.target.value)}
+                      placeholder="Ex: Gymnase"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Passage au self</label>
+                    <input 
+                      type="time" 
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      value={newEventCafeteriaTime}
+                      onChange={e => setNewEventCafeteriaTime(e.target.value)}
+                      title="Heure de passage au self (optionnelle)"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Heure de retour</label>
+                    <input 
+                      type="time" 
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      value={newEventReturnTime}
+                      onChange={e => setNewEventReturnTime(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Début (Séance) *</label>
+                    <input 
+                      type="time" 
+                      required
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      value={newEventTime}
+                      onChange={e => setNewEventTime(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fin (Séance)</label>
+                    <input 
+                      type="time" 
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      value={newEventEndTime}
+                      onChange={e => setNewEventEndTime(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Fin (Séance)</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Lieu de la séance</label>
                   <input 
-                    type="time" 
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={newEventEndTime}
-                    onChange={e => setNewEventEndTime(e.target.value)}
+                    type="text" 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    value={newEventLocation}
+                    onChange={e => setNewEventLocation(e.target.value)}
+                    placeholder="Ex: Stade municipal"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Lieu de la séance</label>
-                <input 
-                  type="text"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={newEventLocation}
-                  onChange={e => setNewEventLocation(e.target.value)}
-                  placeholder="Ex: Stade municipal"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Informations (Optionnel)</label>
-                <textarea 
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={newEventDescription}
-                  onChange={e => setNewEventDescription(e.target.value)}
-                  placeholder="Ex: Penser à prendre les maillots..."
-                  rows={2}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Nombre maximum d'inscrits</label>
-                  <input 
-                    type="number" 
-                    min="1"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={newEventMaxParticipants}
-                    onChange={e => setNewEventMaxParticipants(e.target.value ? parseInt(e.target.value) : '')}
-                    placeholder="Illimité"
-                  />
-                </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Ouverture inscript.</label>
-                  <input 
-                    type="datetime-local" 
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={newEventRegistrationOpenDate}
-                    onChange={e => setNewEventRegistrationOpenDate(e.target.value)}
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Informations (Optionnel)</label>
+                  <textarea 
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    value={newEventDescription}
+                    onChange={e => setNewEventDescription(e.target.value)}
+                    placeholder="Ex: Penser à prendre les maillots..."
+                    rows={2}
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Fermeture inscript.</label>
-                  <input 
-                    type="datetime-local" 
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={newEventRegistrationCloseDate}
-                    onChange={e => setNewEventRegistrationCloseDate(e.target.value)}
-                  />
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Max Inscrits</label>
+                    <input 
+                      type="number" 
+                      min="1"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      value={newEventMaxParticipants}
+                      onChange={e => setNewEventMaxParticipants(e.target.value ? parseInt(e.target.value) : '')}
+                      placeholder="Illimité"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Ouverture inscript.</label>
+                    <input 
+                      type="datetime-local" 
+                      className="w-full px-2.5 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
+                      value={newEventRegistrationOpenDate}
+                      onChange={e => setNewEventRegistrationOpenDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fermeture inscript.</label>
+                    <input 
+                      type="datetime-local" 
+                      className="w-full px-2.5 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
+                      value={newEventRegistrationCloseDate}
+                      onChange={e => setNewEventRegistrationCloseDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center gap-2 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+                    <input 
+                      type="checkbox" 
+                      id="needSnackCal"
+                      className="w-4 h-4 text-amber-600 rounded border-gray-300 focus:ring-amber-500"
+                      checked={newEventNeedSnack}
+                      onChange={e => setNewEventNeedSnack(e.target.checked)}
+                    />
+                    <label htmlFor="needSnackCal" className="text-xs font-semibold text-amber-900 cursor-pointer">
+                      Prévoir un goûter
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                    <input 
+                      type="checkbox" 
+                      id="requireLicenseCal"
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                      checked={newEventRequireLicense}
+                      onChange={e => setNewEventRequireLicense(e.target.checked)}
+                    />
+                    <label htmlFor="requireLicenseCal" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                      Signaler si l'élève n'a pas de licence (non bloquant)
+                    </label>
+                  </div>
+
+                  {/* Section Inscription en équipe */}
+                  <div className="bg-purple-50/80 p-3 rounded-xl border border-purple-200 space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        id="isTeamRegCal"
+                        className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+                        checked={newEventIsTeamRegistration}
+                        onChange={e => setNewEventIsTeamRegistration(e.target.checked)}
+                      />
+                      <span className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-purple-700" />
+                        Inscription en équipe (Tournoi / Raid / Relais...)
+                      </span>
+                    </label>
+
+                    {newEventIsTeamRegistration && (
+                      <div className="pl-6 pt-1 space-y-1.5 border-t border-purple-200/60 mt-1">
+                        <div className="flex items-center gap-2">
+                          <label htmlFor="teamSizeCal" className="text-xs font-bold text-purple-900 whitespace-nowrap">
+                            Nombre d'élèves requis par équipe :
+                          </label>
+                          <input 
+                            type="number"
+                            id="teamSizeCal"
+                            min="2"
+                            max="20"
+                            required={newEventIsTeamRegistration}
+                            className="w-20 px-2.5 py-1 text-xs font-bold text-purple-900 bg-white border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            value={newEventTeamSize}
+                            onChange={e => setNewEventTeamSize(e.target.value ? parseInt(e.target.value) : '')}
+                          />
+                        </div>
+                        <p className="text-[11px] text-purple-700 leading-tight">
+                          L'inscription de l'équipe ne pourra être validée que lorsque celle-ci comptera exactement <strong>{newEventTeamSize || 4} élèves</strong>.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {!editingEventId && (
+                    <div className="flex items-center gap-2 bg-indigo-50 p-2.5 rounded-lg border border-indigo-200">
+                      <input 
+                        type="checkbox" 
+                        id="generateConvocation"
+                        className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                        checked={newEventGenerateConvocation}
+                        onChange={e => setNewEventGenerateConvocation(e.target.checked)}
+                      />
+                      <label htmlFor="generateConvocation" className="text-xs font-semibold text-indigo-900 cursor-pointer">
+                        Intégrer dans la gestion des convocations
+                      </label>
+                    </div>
+                  )}
+                  {editingEventId && newEventGenerateConvocation && (
+                    <div className="flex items-center gap-2 bg-indigo-50 p-2.5 rounded-lg border border-indigo-200">
+                      <span className="text-xs font-semibold text-indigo-900">
+                        Cette séance est liée à une convocation.
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 bg-amber-50 p-3 rounded-lg border border-amber-200">
-                <input 
-                  type="checkbox" 
-                  id="needSnackCal"
-                  className="w-4 h-4 text-amber-600 rounded border-gray-300 focus:ring-amber-500"
-                  checked={newEventNeedSnack}
-                  onChange={e => setNewEventNeedSnack(e.target.checked)}
-                />
-                <label htmlFor="needSnackCal" className="text-sm font-semibold text-amber-800">
-                  Prévoir un goûter
-                </label>
-              </div>
-
-              <div className="flex items-center gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                <input 
-                  type="checkbox" 
-                  id="requireLicenseCal"
-                  className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                  checked={newEventRequireLicense}
-                  onChange={e => setNewEventRequireLicense(e.target.checked)}
-                />
-                <label htmlFor="requireLicenseCal" className="text-sm font-semibold text-slate-700">
-                  Signaler si l'élève n'a pas de licence (non bloquant)
-                </label>
-              </div>
-              
-              {!editingEventId && (
-                <div className="flex items-center gap-2 bg-indigo-50 p-3 rounded-lg border border-indigo-200">
-                  <input 
-                    type="checkbox" 
-                    id="generateConvocation"
-                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                    checked={newEventGenerateConvocation}
-                    onChange={e => setNewEventGenerateConvocation(e.target.checked)}
-                  />
-                  <label htmlFor="generateConvocation" className="text-sm font-semibold text-indigo-900">
-                    Intégrer dans la gestion des convocations
-                  </label>
-                </div>
-              )}
-              {editingEventId && newEventGenerateConvocation && (
-                 <div className="flex items-center gap-2 bg-indigo-50 p-3 rounded-lg border border-indigo-200">
-                   <span className="text-sm font-semibold text-indigo-900">
-                     Cette séance est liée à une convocation.
-                   </span>
-                 </div>
-              )}
-
-              <div className="flex justify-end gap-3 pt-6 border-t border-slate-100 mt-6">
+              {/* Footer fixe toujours visible et ancré avec les boutons d'action */}
+              <div className="px-5 py-3 sm:px-6 sm:py-3.5 border-t border-slate-100 bg-slate-50/95 flex items-center justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsCreatingEvent(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-200/80 rounded-lg font-semibold text-sm transition-colors cursor-pointer"
                   disabled={isSavingEvent}
                 >
                   Annuler
@@ -1102,10 +1268,10 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
                 <button
                   type="submit"
                   disabled={isSavingEvent}
-                  className="flex items-center gap-2 px-5 py-2 text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg font-medium transition-colors shadow-sm disabled:opacity-50"
+                  className="flex items-center gap-2 px-5 py-2.5 text-white bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] rounded-lg font-bold text-sm transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
                 >
                   {isSavingEvent && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {editingEventId ? 'Enregistrer les modifications' : 'Créer la séance'}
+                  <span>{editingEventId ? 'Enregistrer les modifications' : 'Créer la séance'}</span>
                 </button>
               </div>
             </form>

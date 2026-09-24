@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Student, Session } from '../types';
-import { PlusCircle, Calendar, Trash2, CheckCircle2, Circle, Users, Save, Link2 } from 'lucide-react';
+import { PlusCircle, Calendar, Trash2, CheckCircle2, Circle, Users, Save, Link2, Edit2 } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
-import { getSessionsList, saveSessionApi, deleteSessionApi, getTeachersList, saveConvocationApi } from '../lib/db';
+import { 
+  getSessionsList, saveSessionApi, deleteSessionApi, 
+  getTeachersList, saveConvocationApi, deleteTeamFromSession, 
+  enrollTeamInSession 
+} from '../lib/db';
 
 interface SessionManagerProps {
   students: Student[];
@@ -54,6 +58,20 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
     e.preventDefault();
     if (!formData.name || !formData.date) return;
     try {
+      if (formData.id) {
+        // Mode modification
+        await saveSessionApi({
+          ...formData,
+          schoolYear: activeYear,
+          requireLicense: formData.requireLicense || false,
+          isTeamRegistration: !!formData.isTeamRegistration,
+          teamSize: formData.isTeamRegistration ? (Number(formData.teamSize) || 4) : undefined
+        });
+        setIsCreating(false);
+        await fetchSessionManagerData();
+        return;
+      }
+
       let firstDocId: string | null = null;
       const count = isRecurring ? Math.max(1, recurrenceCount) : 1;
       
@@ -68,7 +86,10 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
           schoolYear: activeYear,
           enrolledStudentIds: [],
           presentStudentIds: [],
-          requireLicense: newSession.requireLicense || false
+          requireLicense: newSession.requireLicense || false,
+          isTeamRegistration: !!newSession.isTeamRegistration,
+          teamSize: newSession.isTeamRegistration ? (Number(newSession.teamSize) || 4) : undefined,
+          teams: []
         });
 
         if (i === 0 && created?.id) firstDocId = created.id;
@@ -79,7 +100,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
       await fetchSessionManagerData();
     } catch (error) {
       console.error(error);
-      alert("Erreur lors de la création de la séance.");
+      alert("Erreur lors de l'enregistrement de la séance.");
     }
   };
 
@@ -243,9 +264,32 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
       {/* Right Content */}
       <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
         {isCreating ? (
-          <form onSubmit={handleCreate} className="p-6 max-w-lg">
-            <h2 className="text-xl font-bold text-slate-900 mb-6">Créer une nouvelle séance</h2>
-            <div className="space-y-4">
+          <form onSubmit={handleCreate} className="flex flex-col flex-1 h-full min-h-0 overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  {formData.id ? <Edit2 className="w-5 h-5 text-indigo-600" /> : <PlusCircle className="w-5 h-5 text-indigo-600" />}
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                    {formData.id ? 'Modifier la séance' : 'Créer une nouvelle séance'}
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    {formData.id ? 'Mise à jour des paramètres et options' : `Ajout d'un créneau dans l'année active (${activeYear})`}
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setIsCreating(false)} 
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition-colors cursor-pointer"
+                title="Fermer"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Nom de la séance</label>
                 <input 
@@ -440,43 +484,94 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                   />
                   <span className="text-sm font-semibold text-amber-800">Prévoir un goûter</span>
                 </label>
-              </div>
 
-              <div className="border-t border-slate-200 pt-4 mt-4">
-                <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-50 border border-slate-200 rounded-lg">
-                  <input 
-                    type="checkbox" 
-                    className="rounded text-indigo-600 focus:ring-indigo-500 w-5 h-5"
-                    checked={isRecurring}
-                    onChange={e => setIsRecurring(e.target.checked)}
-                  />
-                  <span className="text-sm font-semibold text-slate-700">Répéter cette séance (toutes les semaines)</span>
-                </label>
-                
-                {isRecurring && (
-                  <div className="mt-4 ml-2 pl-4 border-l-2 border-indigo-200">
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Nombre d'occurrences au total</label>
+                {/* Option Inscription en Équipe */}
+                <div className="bg-purple-50/80 p-3 rounded-xl border border-purple-200 space-y-2">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
                     <input 
-                      type="number" 
-                      min="2"
-                      max="40"
-                      className="w-32 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      value={recurrenceCount}
-                      onChange={e => setRecurrenceCount(parseInt(e.target.value) || 2)}
+                      type="checkbox" 
+                      className="rounded text-purple-600 focus:ring-purple-500 w-5 h-5"
+                      checked={formData.isTeamRegistration || false}
+                      onChange={e => setFormData({
+                        ...formData, 
+                        isTeamRegistration: e.target.checked,
+                        teamSize: e.target.checked ? (formData.teamSize || 4) : undefined
+                      })}
                     />
-                    <p className="text-xs text-slate-500 mt-1">Ex: 4 pour créer la séance sur 4 semaines consécutives.</p>
-                  </div>
-                )}
+                    <span className="text-sm font-bold text-purple-950 flex items-center gap-1.5">
+                      <Users className="w-4 h-4 text-purple-700" />
+                      Inscription en équipe (Tournoi / Raid / Relais...)
+                    </span>
+                  </label>
+
+                  {formData.isTeamRegistration && (
+                    <div className="pl-7 pt-1 space-y-1.5 border-t border-purple-200/60 mt-1">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-bold text-purple-900 whitespace-nowrap">
+                          Nombre d'élèves requis par équipe :
+                        </label>
+                        <input 
+                          type="number"
+                          min="2"
+                          max="20"
+                          required={formData.isTeamRegistration}
+                          className="w-20 px-2.5 py-1 text-xs font-bold text-purple-900 bg-white border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          value={formData.teamSize || 4}
+                          onChange={e => setFormData({...formData, teamSize: parseInt(e.target.value) || 2})}
+                        />
+                      </div>
+                      <p className="text-xs text-purple-700 leading-tight">
+                        L'inscription de l'équipe ne pourra être validée que lorsque celle-ci comptera exactement <strong>{formData.teamSize || 4} élèves</strong>.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="pt-4 flex gap-3">
-                <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-                  <Save className="w-4 h-4" /> Enregistrer
-                </button>
-                <button type="button" onClick={() => setIsCreating(false)} className="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors">
-                  Annuler
-                </button>
-              </div>
+              {!formData.id && (
+                <div className="border-t border-slate-200 pt-4 mt-4">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                    <input 
+                      type="checkbox" 
+                      className="rounded text-indigo-600 focus:ring-indigo-500 w-5 h-5"
+                      checked={isRecurring}
+                      onChange={e => setIsRecurring(e.target.checked)}
+                    />
+                    <span className="text-sm font-semibold text-slate-700">Répéter cette séance (toutes les semaines)</span>
+                  </label>
+                  
+                  {isRecurring && (
+                    <div className="mt-4 ml-2 pl-4 border-l-2 border-indigo-200">
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">Nombre d'occurrences au total</label>
+                      <input 
+                        type="number" 
+                        min="2"
+                        max="40"
+                        className="w-32 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        value={recurrenceCount}
+                        onChange={e => setRecurrenceCount(parseInt(e.target.value) || 2)}
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Ex: 4 pour créer la séance sur 4 semaines consécutives.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-slate-50/90 flex items-center justify-end gap-3 shrink-0">
+              <button 
+                type="button" 
+                onClick={() => setIsCreating(false)} 
+                className="px-4 py-2 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button 
+                type="submit" 
+                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
+              >
+                <Save className="w-4 h-4" /> {formData.id ? 'Enregistrer les modifications' : 'Enregistrer la séance'}
+              </button>
             </div>
           </form>
         ) : activeSession ? (
@@ -485,6 +580,12 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
               <div>
                 <div className="flex items-center gap-3 mb-1">
                   <h2 className="text-2xl font-bold text-slate-900">{activeSession.name}</h2>
+                  {activeSession.isTeamRegistration && (
+                    <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2.5 py-1 rounded-full border border-purple-200 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-purple-700" />
+                      Équipe ({activeSession.teamSize || 4} élèves / équipe)
+                    </span>
+                  )}
                   {activeSession.requireLicense && (
                     <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full border border-red-200">Licence Obligatoire</span>
                   )}
@@ -517,13 +618,26 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                   <Link2 className="w-4 h-4" /> Copier le lien d'inscription
                 </button>
               </div>
-              <button 
-                onClick={() => setSessionToDelete(activeSession.id)}
-                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                title="Supprimer la séance"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={() => {
+                    setFormData({ ...activeSession });
+                    setIsRecurring(false);
+                    setIsCreating(true);
+                  }}
+                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                  title="Modifier les paramètres de la séance"
+                >
+                  <Edit2 className="w-5 h-5" />
+                </button>
+                <button 
+                  onClick={() => setSessionToDelete(activeSession.id)}
+                  className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                  title="Supprimer la séance"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             
             <div className="p-6 flex-1 flex flex-col overflow-hidden">
@@ -536,6 +650,71 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                   onChange={e => setSearchTerm(e.target.value)}
                 />
               </div>
+
+              {/* Section Équipes si la séance est en mode équipe */}
+              {activeSession.isTeamRegistration && (
+                <div className="mb-6 bg-purple-50/50 p-4 rounded-xl border border-purple-100 shrink-0">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                      <Users className="w-4 h-4 text-purple-600" />
+                      Équipes inscrites ({activeSession.teams?.length || 0})
+                    </h3>
+                    <span className="text-xs bg-purple-100 text-purple-800 font-bold px-2.5 py-0.5 rounded-full border border-purple-200">
+                      Règle : {activeSession.teamSize || 4} élèves par équipe
+                    </span>
+                  </div>
+
+                  {(!activeSession.teams || activeSession.teams.length === 0) ? (
+                    <p className="text-xs text-slate-500 italic py-1">
+                      Aucune équipe n'est encore constituée pour cette séance.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {activeSession.teams.map((team, idx) => (
+                        <div key={team.id} className="bg-white p-3 rounded-lg border border-purple-200/80 shadow-xs flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                                <span className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 text-[10px] flex items-center justify-center font-black">
+                                  {idx + 1}
+                                </span>
+                                <span className="truncate">{team.name}</span>
+                              </span>
+                              <button
+                                onClick={async () => {
+                                  if (confirm(`Supprimer l'équipe "${team.name}" ?`)) {
+                                    await deleteTeamFromSession(activeSession.id, team.id);
+                                    await fetchSessionManagerData();
+                                  }
+                                }}
+                                className="text-slate-400 hover:text-red-500 p-0.5 transition-colors cursor-pointer"
+                                title="Supprimer cette équipe"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <div className="space-y-1">
+                              {team.studentIds.map(sid => {
+                                const st = students.find(s => s.id === sid);
+                                return (
+                                  <div key={sid} className="text-[11px] text-slate-700 flex items-center justify-between bg-slate-50 px-2 py-0.5 rounded">
+                                    <span className="truncate">{st ? `${st.lastName} ${st.firstName}` : sid}</span>
+                                    {st?.classGroup && <span className="text-[9px] text-slate-400 font-bold ml-1">{st.classGroup}</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          <div className="mt-2 pt-1 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                            <span>{team.studentIds.length} / {activeSession.teamSize || 4} membres</span>
+                            <span className="text-emerald-600 font-semibold">Équipe complète ✓</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 flex-1 overflow-hidden">
                 

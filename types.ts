@@ -79,6 +79,13 @@ export interface Convocation {
   returnTime?: string; // Heure de retour
 }
 
+export interface SessionTeam {
+  id: string; // Identifiant unique de l'équipe
+  name: string; // Nom de l'équipe (ex: "Les Éperviers", "Team 3B")
+  studentIds: string[]; // Liste des IDs des élèves composant l'équipe
+  createdAt: string; // Date de création
+}
+
 export interface Session {
   id: string;
   date: string; // ISO date string
@@ -102,6 +109,9 @@ export interface Session {
   returnTime?: string; // Heure de retour
   registrationOpenDate?: string; // Date d'ouverture des inscriptions
   registrationCloseDate?: string; // Date de fermeture des inscriptions
+  isTeamRegistration?: boolean; // Inscription en équipe activée
+  teamSize?: number; // Nombre d'élèves requis par équipe pour valider l'inscription
+  teams?: SessionTeam[]; // Liste des équipes enregistrées
 }
 
 export interface ColumnDefinition {

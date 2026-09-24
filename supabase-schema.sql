@@ -58,8 +58,16 @@ CREATE TABLE IF NOT EXISTS public.sessions (
   cafeteria_time TEXT,
   return_time TEXT,
   registration_open_date TEXT,
-  registration_close_date TEXT
+  registration_close_date TEXT,
+  is_team_registration BOOLEAN DEFAULT FALSE,
+  team_size INTEGER,
+  teams JSONB DEFAULT '[]'::jsonb
 );
+
+-- Migrations douces si la table existe déjà
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS is_team_registration BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS team_size INTEGER;
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS teams JSONB DEFAULT '[]'::jsonb;
 
 -- 4. Table des convocations compétitions (convocations)
 CREATE TABLE IF NOT EXISTS public.convocations (

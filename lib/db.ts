@@ -582,6 +582,82 @@ export const enrollInSession = async (sessionId: string, studentId: string): Pro
   }
 };
 
+/**
+ * Inscription d'une équipe complète à une séance
+ */
+export const enrollTeamInSession = async (
+  sessionId: string,
+  teamName: string,
+  studentIds: string[]
+): Promise<{ id: string; name: string; studentIds: string[]; createdAt: string }> => {
+  const newTeam = {
+    id: 'team_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36),
+    name: teamName.trim() || 'Équipe',
+    studentIds: Array.from(new Set(studentIds)),
+    createdAt: new Date().toISOString()
+  };
+
+  try {
+    const session = await getSession(sessionId);
+    if (!session) throw new Error('Séance introuvable');
+
+    const currentEnrolled = new Set(session.enrolledStudentIds || []);
+    newTeam.studentIds.forEach(id => currentEnrolled.add(id));
+
+    const currentTeams = [...(session.teams || [])];
+    currentTeams.push(newTeam);
+
+    await saveSessionApi({
+      id: sessionId,
+      enrolledStudentIds: Array.from(currentEnrolled),
+      teams: currentTeams
+    });
+
+    return newTeam;
+  } catch (err) {
+    console.warn('Error in enrollTeamInSession:', err);
+    try {
+      await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(sessionId)}/enroll-team`, {
+        method: 'POST',
+        body: JSON.stringify({ team: newTeam })
+      });
+    } catch (e) {
+      console.warn('API fallback enroll-team error:', e);
+    }
+    return newTeam;
+  }
+};
+
+/**
+ * Retrait / suppression d'une équipe inscrite
+ */
+export const deleteTeamFromSession = async (
+  sessionId: string,
+  teamId: string
+): Promise<void> => {
+  try {
+    const session = await getSession(sessionId);
+    if (!session) return;
+
+    const teamToRemove = (session.teams || []).find(t => t.id === teamId);
+    const updatedTeams = (session.teams || []).filter(t => t.id !== teamId);
+    
+    let updatedEnrolled = session.enrolledStudentIds || [];
+    if (teamToRemove) {
+      const otherTeamStudentIds = new Set(updatedTeams.flatMap(t => t.studentIds));
+      updatedEnrolled = updatedEnrolled.filter(id => otherTeamStudentIds.has(id));
+    }
+
+    await saveSessionApi({
+      id: sessionId,
+      teams: updatedTeams,
+      enrolledStudentIds: updatedEnrolled
+    });
+  } catch (err) {
+    console.error('Error deleteTeamFromSession:', err);
+  }
+};
+
 // ----------------------------------------------------
 // CONVOCATIONS
 // ----------------------------------------------------

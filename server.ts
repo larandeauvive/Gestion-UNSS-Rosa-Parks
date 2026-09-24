@@ -375,6 +375,27 @@ async function startServer() {
     }
   });
 
+  // Public/team enrollment endpoint
+  app.post('/api/sessions/:id/enroll-team', async (req, res) => {
+    try {
+      const { team } = req.body;
+      const session = await getSessionById(req.params.id);
+      if (!session) return res.status(404).json({ error: 'Séance non trouvée' });
+
+      const enrolled = new Set(session.enrolledStudentIds || []);
+      (team.studentIds || []).forEach((id: string) => enrolled.add(id));
+
+      const teams = [...(session.teams || []), team];
+      await updateSessionById(req.params.id, { 
+        enrolledStudentIds: Array.from(enrolled),
+        teams
+      });
+      res.json({ success: true, team });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // --------------------------------------------------------------------------
   // CONVOCATIONS
   // --------------------------------------------------------------------------

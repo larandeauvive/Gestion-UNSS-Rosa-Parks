@@ -224,7 +224,10 @@ export function saveLocalSession(session: Partial<Session>): Session {
     cafeteriaTime: session.cafeteriaTime,
     returnTime: session.returnTime,
     registrationOpenDate: session.registrationOpenDate,
-    registrationCloseDate: session.registrationCloseDate
+    registrationCloseDate: session.registrationCloseDate,
+    isTeamRegistration: session.isTeamRegistration ?? false,
+    teamSize: session.teamSize,
+    teams: session.teams || []
   };
 
   const idx = all.findIndex(s => s.id === id);

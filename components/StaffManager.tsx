@@ -1401,9 +1401,9 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
       {/* MODALE MEMBRE (AJOUT / ÉDITION) */}
       {/* ========================================================================================= */}
       {isMemberModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150 my-auto">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <Users className="w-5 h-5 text-indigo-400" />
                 <h3 className="font-bold text-base">
@@ -1413,14 +1413,16 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
               <button
                 type="button"
                 onClick={() => setIsMemberModalOpen(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+                title="Fermer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveMember} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-              {/* Nom & Prénom */}
+            <form onSubmit={handleSaveMember} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                {/* Nom & Prénom */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -1622,23 +1624,24 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
                 />
               </div>
+            </div>
 
-              {/* Boutons validation */}
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsMemberModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm"
-                >
-                  {editingMember ? "Enregistrer les modifications" : "Ajouter le membre"}
-                </button>
-              </div>
+            {/* Boutons validation fixes */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50/80 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsMemberModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200/80 rounded-xl transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm transition-colors"
+              >
+                {editingMember ? "Enregistrer les modifications" : "Ajouter le membre"}
+              </button>
+            </div>
 
             </form>
           </div>
@@ -1649,9 +1652,9 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
       {/* MODALE CRÉNEAU (AJOUT / ÉDITION) */}
       {/* ========================================================================================= */}
       {isSlotModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150 my-auto">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <Moon className="w-5 h-5 text-amber-400" />
                 <h3 className="font-bold text-base">
@@ -1661,103 +1664,106 @@ export const StaffManager: React.FC<Props> = ({ activeYear }) => {
               <button
                 type="button"
                 onClick={() => setIsSlotModalOpen(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+                title="Fermer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveSlot} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Intitulé de l'activité *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Badminton & Volley loisir"
-                  value={slotForm.name}
-                  onChange={e => setSlotForm({ ...slotForm, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
+            <form onSubmit={handleSaveSlot} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="p-6 space-y-4 overflow-y-auto flex-1">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Jour
-                  </label>
-                  <select
-                    value={slotForm.dayOfWeek}
-                    onChange={e => setSlotForm({ ...slotForm, dayOfWeek: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
-                  >
-                    {['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'].map(d => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Début
+                    Intitulé de l'activité *
                   </label>
                   <input
-                    type="time"
-                    value={slotForm.startTime}
-                    onChange={e => setSlotForm({ ...slotForm, startTime: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
+                    type="text"
+                    required
+                    placeholder="Ex: Badminton & Volley loisir"
+                    value={slotForm.name}
+                    onChange={e => setSlotForm({ ...slotForm, name: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Jour
+                    </label>
+                    <select
+                      value={slotForm.dayOfWeek}
+                      onChange={e => setSlotForm({ ...slotForm, dayOfWeek: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
+                    >
+                      {['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'].map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Début
+                    </label>
+                    <input
+                      type="time"
+                      value={slotForm.startTime}
+                      onChange={e => setSlotForm({ ...slotForm, startTime: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Fin
+                    </label>
+                    <input
+                      type="time"
+                      value={slotForm.endTime}
+                      onChange={e => setSlotForm({ ...slotForm, endTime: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Fin
+                    Lieu
                   </label>
                   <input
-                    type="time"
-                    value={slotForm.endTime}
-                    onChange={e => setSlotForm({ ...slotForm, endTime: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
+                    type="text"
+                    placeholder="Ex: Gymnase Rosa Parks, Salle de muscu..."
+                    value={slotForm.location}
+                    onChange={e => setSlotForm({ ...slotForm, location: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Description / Consignes
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Informations sur le matériel, le niveau, etc."
+                    value={slotForm.description}
+                    onChange={e => setSlotForm({ ...slotForm, description: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Lieu
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: Gymnase Rosa Parks, Salle de muscu..."
-                  value={slotForm.location}
-                  onChange={e => setSlotForm({ ...slotForm, location: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Description / Consignes
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Informations sur le matériel, le niveau, etc."
-                  value={slotForm.description}
-                  onChange={e => setSlotForm({ ...slotForm, description: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
-                />
-              </div>
-
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
+              <div className="p-4 border-t border-slate-200 bg-slate-50/80 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsSlotModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200/80 rounded-xl transition-colors"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm"
+                  className="px-5 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm transition-colors"
                 >
                   {editingSlot ? "Enregistrer" : "Créer le créneau"}
                 </button>

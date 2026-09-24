@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, text, boolean, integer, timestamp, jsonb } from 'drizzle-orm/pg-core';
 
 // Élèves (students)
 export const students = pgTable('students', {
@@ -54,7 +54,10 @@ export const sessions = pgTable('sessions', {
   cafeteriaTime: text('cafeteria_time'),
   returnTime: text('return_time'),
   registrationOpenDate: text('registration_open_date'),
-  registrationCloseDate: text('registration_close_date')
+  registrationCloseDate: text('registration_close_date'),
+  isTeamRegistration: boolean('is_team_registration').default(false),
+  teamSize: integer('team_size'),
+  teams: jsonb('teams')
 });
 
 // Convocations compétitions (convocations)
