@@ -588,7 +588,7 @@ async function startServer() {
   // --------------------------------------------------------------------------
   // API 404 FALLBACK (EMPÊCHE LES RÉPONSES HTML DE VITE SUR L'API)
   // --------------------------------------------------------------------------
-  app.all('/api/*', (req, res) => {
+  app.use('/api', (req, res) => {
     res.status(404).json({ error: `Route API introuvable: ${req.method} ${req.originalUrl}` });
   });
 
