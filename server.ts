@@ -341,10 +341,41 @@ async function startServer() {
     }
   });
 
+  app.put('/api/sessions', async (req, res) => {
+    try {
+      const id = req.body?.id;
+      if (!id) return res.status(400).json({ error: 'ID de séance manquant dans le corps de la requête.' });
+      await updateSessionById(id, req.body);
+      res.json({ success: true, id });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.put('/api/sessions/:id', async (req, res) => {
     try {
       await updateSessionById(req.params.id, req.body);
       res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch('/api/sessions/:id', async (req, res) => {
+    try {
+      await updateSessionById(req.params.id, req.body);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch('/api/sessions', async (req, res) => {
+    try {
+      const id = req.body?.id;
+      if (!id) return res.status(400).json({ error: 'ID de séance manquant dans le corps de la requête.' });
+      await updateSessionById(id, req.body);
+      res.json({ success: true, id });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -552,6 +583,13 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // --------------------------------------------------------------------------
+  // API 404 FALLBACK (EMPÊCHE LES RÉPONSES HTML DE VITE SUR L'API)
+  // --------------------------------------------------------------------------
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `Route API introuvable: ${req.method} ${req.originalUrl}` });
   });
 
   // --------------------------------------------------------------------------

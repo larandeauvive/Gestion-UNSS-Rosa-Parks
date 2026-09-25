@@ -41,7 +41,7 @@ import {
 
 const API_BASE = '/api';
 
-// Fallback helper for API routes if needed (e.g. backup, restore, reset)
+// Helper for API routes with robust HTML/JSON error detection
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('as_auth_token') || 'admin-secret-passkey';
   const headers: Record<string, string> = {
@@ -50,10 +50,41 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     ...(options?.headers as Record<string, string> || {})
   };
   const res = await fetch(url, { ...options, headers });
+  const contentType = res.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+
   if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({}));
-    throw new Error(errorBody.error || `Erreur serveur (${res.status})`);
+    let errorMessage = `Erreur serveur (${res.status})`;
+    if (isJson) {
+      try {
+        const errorBody = await res.json();
+        errorMessage = errorBody.error || errorBody.message || errorMessage;
+      } catch {
+        // Ignorer erreur de parsing
+      }
+    } else {
+      const text = await res.text().catch(() => '');
+      if (text && !text.includes('<!DOCTYPE') && !text.includes('<html')) {
+        errorMessage = text.slice(0, 150);
+      } else {
+        errorMessage = `Erreur API (${res.status}): Réponse HTML inattendue.`;
+      }
+    }
+    throw new Error(errorMessage);
   }
+
+  if (!isJson) {
+    const text = await res.text().catch(() => '');
+    if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+      throw new Error(`Format inattendu: le serveur a renvoyé du HTML pour ${url}`);
+    }
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return text as unknown as T;
+    }
+  }
+
   return res.json();
 }
 
@@ -471,12 +502,17 @@ export const getSessionsList = async (schoolYear?: string): Promise<Session[]> =
     if (error) {
       console.warn('Supabase getSessionsList error, falling back to API:', error.message);
       const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
-      return fetchJson<Session[]>(`${API_BASE}/sessions${q}`);
+      const serverList = await fetchJson<Session[]>(`${API_BASE}/sessions${q}`);
+      return serverList;
     }
     return (data || []).map(rowToSession);
   } catch {
-    const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
-    return fetchJson<Session[]>(`${API_BASE}/sessions${q}`);
+    try {
+      const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+      return await fetchJson<Session[]>(`${API_BASE}/sessions${q}`);
+    } catch {
+      return getLocalSessions(schoolYear);
+    }
   }
 };
 
@@ -486,40 +522,73 @@ export const getSession = async (id: string): Promise<Session> => {
     if (error || !data) throw error || new Error('Séance introuvable');
     return rowToSession(data);
   } catch {
-    return fetchJson<Session>(`${API_BASE}/sessions/${encodeURIComponent(id)}`);
+    try {
+      return await fetchJson<Session>(`${API_BASE}/sessions/${encodeURIComponent(id)}`);
+    } catch {
+      const all = getLocalSessions();
+      const s = all.find(item => item.id === id);
+      if (!s) throw new Error('Séance introuvable');
+      return s;
+    }
   }
 };
 
 export const addSessionApi = async (data: Omit<Session, 'id'>): Promise<string> => {
   const newId = crypto.randomUUID();
-  const row = sessionToRow({
-    ...data,
-    id: newId
-  });
+  const sessionWithId = { ...data, id: newId };
+  // Sauvegarde locale miroir immédiate
+  saveLocalSession(sessionWithId);
+
+  const row = sessionToRow(sessionWithId);
 
   try {
     const { error } = await supabase.from('sessions').insert(row);
-    if (error) throw error;
+    if (error) {
+      console.warn('Supabase insert session error, falling back to API:', error.message);
+      const res = await fetchJson<{ id: string }>(`${API_BASE}/sessions`, {
+        method: 'POST',
+        body: JSON.stringify(sessionWithId)
+      });
+      return res.id || newId;
+    }
     return newId;
   } catch {
-    const res = await fetchJson<{ id: string }>(`${API_BASE}/sessions`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-    return res.id;
+    try {
+      const res = await fetchJson<{ id: string }>(`${API_BASE}/sessions`, {
+        method: 'POST',
+        body: JSON.stringify(sessionWithId)
+      });
+      return res.id || newId;
+    } catch (apiErr) {
+      console.warn('Backend API addSession fallback failed, using local save:', apiErr);
+      return newId;
+    }
   }
 };
 
 export const updateSessionApi = async (id: string, data: Partial<Session>): Promise<void> => {
+  // Sauvegarde locale miroir immédiate
+  saveLocalSession({ ...data, id });
+
   const row = sessionToRow(data);
   try {
     const { error } = await supabase.from('sessions').update(row).eq('id', id);
-    if (error) throw error;
+    if (error) {
+      console.warn('Supabase update session error, falling back to API:', error.message);
+      await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      });
+    }
   } catch {
-    await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(id)}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
+    try {
+      await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      });
+    } catch (apiErr) {
+      console.warn('Backend API updateSession fallback failed, using local save:', apiErr);
+    }
   }
 };
 
