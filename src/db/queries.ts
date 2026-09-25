@@ -362,7 +362,7 @@ export async function getSessionById(id: string): Promise<Session | null> {
 export async function createSession(data: Omit<Session, 'id'> & { id?: string }): Promise<string> {
   try {
     const id = data.id || ('ses_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36));
-    await db.insert(sessions).values({
+    const values = {
       id,
       name: data.name,
       date: data.date,
@@ -390,6 +390,11 @@ export async function createSession(data: Omit<Session, 'id'> & { id?: string })
       isTeamRegistration: !!data.isTeamRegistration,
       teamSize: data.teamSize || null,
       teams: data.teams || []
+    };
+
+    await db.insert(sessions).values(values).onConflictDoUpdate({
+      target: sessions.id,
+      set: values
     });
     return id;
   } catch (error) {

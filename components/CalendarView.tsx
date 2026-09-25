@@ -287,18 +287,22 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
               cafeteriaTime: newEventCafeteriaTime,
               returnTime: newEventReturnTime
            };
-           const convResult = await saveConvocationApi(convData);
-           if (convResult?.id) {
-             await saveSessionApi({ id: sessionResult.id, convocationId: convResult.id });
+           try {
+             const convResult = await saveConvocationApi(convData);
+             if (convResult?.id) {
+               await saveSessionApi({ id: sessionResult.id, convocationId: convResult.id });
+             }
+           } catch (convErr) {
+             console.warn('Convocation creation warning (session was saved):', convErr);
            }
         }
       }
       setIsCreatingEvent(false);
       setEditingEventId(null);
       await loadCalendarData();
-    } catch (err) {
-      console.error(err);
-      alert('Erreur lors de l\'enregistrement de la séance.');
+    } catch (err: any) {
+      console.error('Erreur enregistrement séance calendrier:', err);
+      alert('Erreur lors de l\'enregistrement de la séance : ' + (err?.message || 'Erreur inattendue'));
     } finally {
       setIsSavingEvent(false);
     }

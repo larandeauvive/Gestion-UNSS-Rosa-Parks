@@ -78,21 +78,30 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
       const count = isRecurring ? Math.max(1, recurrenceCount) : 1;
       
       for (let i = 0; i < count; i++) {
-        const d = new Date(formData.date);
-        d.setDate(d.getDate() + (i * 7));
-        const dateStr = d.toISOString().slice(0, 10);
+        let dateStr = formData.date;
+        if (i > 0) {
+          const parts = (formData.date || '').split('-');
+          if (parts.length === 3) {
+            const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+            d.setDate(d.getDate() + (i * 7));
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            dateStr = `${y}-${m}-${day}`;
+          }
+        }
         
         const created = await saveSessionApi({
-          ...newSession,
+          ...formData,
           date: dateStr,
           schoolYear: activeYear,
           enrolledStudentIds: [],
           presentStudentIds: [],
-          requireLicense: !!newSession.requireLicense,
-          requireParentalAuth: !!newSession.requireParentalAuth,
-          requireSwimmingCertificate: !!newSession.requireSwimmingCertificate,
-          isTeamRegistration: !!newSession.isTeamRegistration,
-          teamSize: newSession.isTeamRegistration ? (Number(newSession.teamSize) || 4) : undefined,
+          requireLicense: !!formData.requireLicense,
+          requireParentalAuth: !!formData.requireParentalAuth,
+          requireSwimmingCertificate: !!formData.requireSwimmingCertificate,
+          isTeamRegistration: !!formData.isTeamRegistration,
+          teamSize: formData.isTeamRegistration ? (Number(formData.teamSize) || 4) : undefined,
           teams: []
         });
 
@@ -102,9 +111,9 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
       if (firstDocId) setActiveSessionId(firstDocId);
       setIsCreating(false);
       await fetchSessionManagerData();
-    } catch (error) {
-      console.error(error);
-      alert("Erreur lors de l'enregistrement de la séance.");
+    } catch (error: any) {
+      console.error('Erreur enregistrement séance:', error);
+      alert("Erreur lors de l'enregistrement de la séance : " + (error?.message || 'Erreur inattendue'));
     }
   };
 

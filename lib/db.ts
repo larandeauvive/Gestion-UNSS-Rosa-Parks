@@ -492,6 +492,35 @@ export const deleteTeacherApi = async (id: string): Promise<void> => {
 // ----------------------------------------------------
 // SESSIONS & CRÉNEAUX D'ACTIVITÉS (Supabase client direct)
 // ----------------------------------------------------
+// Safe ID generator that works even if crypto.randomUUID is not available
+function generateSafeId(prefix = 'ses'): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // fallback
+  }
+  return `${prefix}_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
+}
+
+function mergeSessionsWithLocal(remoteList: Session[], schoolYear?: string): Session[] {
+  const localList = getLocalSessions(schoolYear);
+  const map = new Map<string, Session>();
+  for (const s of remoteList || []) {
+    if (s && s.id) map.set(s.id, s);
+  }
+  for (const s of localList || []) {
+    if (s && s.id) {
+      const existing = map.get(s.id);
+      map.set(s.id, existing ? { ...existing, ...s } : s);
+    }
+  }
+  const result = Array.from(map.values());
+  result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  return result;
+}
+
 export const getSessionsList = async (schoolYear?: string): Promise<Session[]> => {
   try {
     let query = supabase.from('sessions').select('*').order('date', { ascending: false });
@@ -503,13 +532,15 @@ export const getSessionsList = async (schoolYear?: string): Promise<Session[]> =
       console.warn('Supabase getSessionsList error, falling back to API:', error.message);
       const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
       const serverList = await fetchJson<Session[]>(`${API_BASE}/sessions${q}`);
-      return serverList;
+      return mergeSessionsWithLocal(serverList, schoolYear);
     }
-    return (data || []).map(rowToSession);
+    const mapped = (data || []).map(rowToSession);
+    return mergeSessionsWithLocal(mapped, schoolYear);
   } catch {
     try {
       const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
-      return await fetchJson<Session[]>(`${API_BASE}/sessions${q}`);
+      const serverList = await fetchJson<Session[]>(`${API_BASE}/sessions${q}`);
+      return mergeSessionsWithLocal(serverList, schoolYear);
     } catch {
       return getLocalSessions(schoolYear);
     }
@@ -534,9 +565,9 @@ export const getSession = async (id: string): Promise<Session> => {
 };
 
 export const addSessionApi = async (data: Omit<Session, 'id'>): Promise<string> => {
-  const newId = crypto.randomUUID();
+  const newId = generateSafeId('ses');
   const sessionWithId = { ...data, id: newId };
-  // Sauvegarde locale miroir immédiate
+  // Sauvegarde locale miroir immédiate pour réactivité instantanée
   saveLocalSession(sessionWithId);
 
   const row = sessionToRow(sessionWithId);
@@ -544,12 +575,17 @@ export const addSessionApi = async (data: Omit<Session, 'id'>): Promise<string> 
   try {
     const { error } = await supabase.from('sessions').insert(row);
     if (error) {
-      console.warn('Supabase insert session error, falling back to API:', error.message);
-      const res = await fetchJson<{ id: string }>(`${API_BASE}/sessions`, {
-        method: 'POST',
-        body: JSON.stringify(sessionWithId)
-      });
-      return res.id || newId;
+      console.warn('Supabase insert session error, falling back to backend API:', error.message);
+      try {
+        const res = await fetchJson<{ id: string }>(`${API_BASE}/sessions`, {
+          method: 'POST',
+          body: JSON.stringify(sessionWithId)
+        });
+        return res.id || newId;
+      } catch (apiErr) {
+        console.warn('Backend API addSession fallback failed, using local save:', apiErr);
+        return newId;
+      }
     }
     return newId;
   } catch {
@@ -575,10 +611,14 @@ export const updateSessionApi = async (id: string, data: Partial<Session>): Prom
     const { error } = await supabase.from('sessions').update(row).eq('id', id);
     if (error) {
       console.warn('Supabase update session error, falling back to API:', error.message);
-      await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(id)}`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-      });
+      try {
+        await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          body: JSON.stringify(data)
+        });
+      } catch (apiErr) {
+        console.warn('Backend API updateSession fallback error, using local save:', apiErr);
+      }
     }
   } catch {
     try {
@@ -593,13 +633,20 @@ export const updateSessionApi = async (id: string, data: Partial<Session>): Prom
 };
 
 export const saveSessionApi = async (data: Partial<Session> & { id?: string }): Promise<{ id: string }> => {
-  if (data.id) {
-    const { id, ...rest } = data;
-    await updateSessionApi(id, rest);
-    return { id };
-  } else {
-    const newId = await addSessionApi(data as Omit<Session, 'id'>);
-    return { id: newId };
+  try {
+    if (data.id) {
+      const { id, ...rest } = data;
+      await updateSessionApi(id, rest);
+      return { id };
+    } else {
+      const newId = await addSessionApi(data as Omit<Session, 'id'>);
+      return { id: newId };
+    }
+  } catch (err) {
+    console.warn('saveSessionApi critical fallback to local storage:', err);
+    const fallbackId = data.id || generateSafeId('ses');
+    saveLocalSession({ ...data, id: fallbackId });
+    return { id: fallbackId };
   }
 };
 
@@ -746,18 +793,34 @@ export const getConvocationsList = async (schoolYear?: string): Promise<Convocat
 };
 
 export const addConvocationApi = async (data: Omit<Convocation, 'id'>): Promise<string> => {
-  const newId = crypto.randomUUID();
+  const newId = generateSafeId('cnv');
   const row = convocationToRow({ ...data, id: newId });
   try {
     const { error } = await supabase.from('convocations').insert(row);
-    if (error) throw error;
+    if (error) {
+      console.warn('Supabase insert convocation error, falling back to API:', error.message);
+      try {
+        const res = await fetchJson<{ id: string }>(`${API_BASE}/convocations`, {
+          method: 'POST',
+          body: JSON.stringify(data)
+        });
+        return res.id || newId;
+      } catch (apiErr) {
+        console.warn('Backend API addConvocation error:', apiErr);
+        return newId;
+      }
+    }
     return newId;
   } catch {
-    const res = await fetchJson<{ id: string }>(`${API_BASE}/convocations`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-    return res.id;
+    try {
+      const res = await fetchJson<{ id: string }>(`${API_BASE}/convocations`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+      return res.id || newId;
+    } catch {
+      return newId;
+    }
   }
 };
 
@@ -765,12 +828,26 @@ export const updateConvocationApi = async (id: string, data: Partial<Convocation
   const row = convocationToRow(data);
   try {
     const { error } = await supabase.from('convocations').update(row).eq('id', id);
-    if (error) throw error;
+    if (error) {
+      console.warn('Supabase update convocation error, falling back to API:', error.message);
+      try {
+        await fetchJson(`${API_BASE}/convocations/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          body: JSON.stringify(data)
+        });
+      } catch (apiErr) {
+        console.warn('Backend API updateConvocation error:', apiErr);
+      }
+    }
   } catch {
-    await fetchJson(`${API_BASE}/convocations/${encodeURIComponent(id)}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
+    try {
+      await fetchJson(`${API_BASE}/convocations/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      });
+    } catch {
+      // Ignorer erreur non bloquante
+    }
   }
 };
 
