@@ -1,30 +1,44 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { PublicStudent, Session, SessionTeam } from '../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { PublicStudent, Session } from '../types';
 import { 
-  CheckCircle2, Search, AlertTriangle, ShieldCheck, 
-  Users, UserPlus, X, Trophy, Sparkles, Check, ChevronRight 
+  CheckCircle2, Search, AlertCircle, Users, 
+  X, Trophy, Sparkles, Check, ArrowLeft,
+  Calendar, Clock, MapPin, UserCheck, Loader2
 } from 'lucide-react';
-import { getSession, getPublicDirectory, enrollInSession, enrollTeamInSession } from '../lib/db';
+import { getSession, getPublicDirectory, enrollInSession, enrollTeamInSession, addStudent } from '../lib/db';
 
 interface PublicEnrollmentProps {
   sessionId: string;
+  onBack?: () => void;
 }
 
-export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
+export function PublicEnrollment({ sessionId, onBack }: PublicEnrollmentProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [students, setStudents] = useState<PublicStudent[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [enrollingId, setEnrollingId] = useState<string | null>(null);
+  const [lastEnrolledStudent, setLastEnrolledStudent] = useState<PublicStudent | null>(null);
 
-  // États pour l'inscription en équipe
+  // Pour inscription en équipe
   const [teamName, setTeamName] = useState('');
   const [selectedTeamStudents, setSelectedTeamStudents] = useState<PublicStudent[]>([]);
-  const [teamSearchTerm, setTeamSearchTerm] = useState('');
   const [isSubmittingTeam, setIsSubmittingTeam] = useState(false);
   const [teamSuccessMessage, setTeamSuccessMessage] = useState<string | null>(null);
-  const [teamTab, setTeamTab] = useState<'create' | 'list'>('create');
+
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleGoBack = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete('enroll');
+    url.searchParams.set('public', 'calendar');
+    window.location.href = url.pathname + url.search;
+  };
 
   const fetchData = async () => {
     try {
@@ -41,7 +55,7 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
       setLoading(false);
     } catch (err) {
       console.error(err);
-      setError('Erreur de chargement.');
+      setError('Erreur lors du chargement des informations.');
       setLoading(false);
     }
   };
@@ -50,55 +64,31 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
     fetchData();
   }, [sessionId]);
 
+  useEffect(() => {
+    if (!loading && session) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 200);
+    }
+  }, [loading, session]);
+
   const filteredStudents = useMemo(() => {
-    if (searchTerm.trim().length < 2) return [];
-    return students.filter(student => {
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch = (student.lastName || '').toLowerCase().includes(searchLower) ||
-                            (student.firstName || '').toLowerCase().includes(searchLower);
-      return matchesSearch;
-    });
-  }, [students, searchTerm]);
-
-  // Recherche des élèves pour composer son équipe
-  const filteredTeamCandidates = useMemo(() => {
-    if (teamSearchTerm.trim().length < 2) return [];
-    const query = teamSearchTerm.toLowerCase();
-    const alreadySelectedIds = new Set(selectedTeamStudents.map(s => s.id));
-
+    const q = searchTerm.trim().toLowerCase();
+    if (q.length < 2) return [];
     return students
-      .filter(s => !alreadySelectedIds.has(s.id))
-      .filter(s => {
-        const matches = (s.lastName || '').toLowerCase().includes(query) ||
-                        (s.firstName || '').toLowerCase().includes(query);
-        return matches;
+      .filter(student => {
+        const last = (student.lastName || '').toLowerCase();
+        const first = (student.firstName || '').toLowerCase();
+        const full = `${last} ${first}`;
+        const reverse = `${first} ${last}`;
+        const classe = (student.classGroup || '').toLowerCase();
+        return full.includes(q) || reverse.includes(q) || classe === q;
       })
-      .slice(0, 10);
-  }, [students, teamSearchTerm, selectedTeamStudents]);
-
-  const getMissingRequirements = (st: PublicStudent): string[] => {
-    if (!session) return [];
-    const missing: string[] = [];
-    if (session.requireLicense && (!st.licenseNumber || st.licenseNumber.trim().length === 0)) {
-      missing.push('Numéro de licence AS manquant');
-    }
-    if (session.requireParentalAuth && String(st.parentalAuth).toUpperCase() !== 'OUI') {
-      missing.push('Autorisation parentale non validée');
-    }
-    if (session.requireSwimmingCertificate && String(st.swimmingCertificate).toUpperCase() !== 'OUI') {
-      missing.push('Attestation savoir nager non validée');
-    }
-    return missing;
-  };
+      .slice(0, 15);
+  }, [students, searchTerm]);
 
   const handleEnroll = async (student: PublicStudent) => {
     if (!session) return;
-
-    const missing = getMissingRequirements(student);
-    if (missing.length > 0) {
-      alert(`Inscription impossible pour ${student.firstName} ${student.lastName} :\n- ${missing.join('\n- ')}\n\nVeuillez régulariser votre dossier auprès des professeurs d'EPS.`);
-      return;
-    }
 
     setEnrollingId(student.id);
     try {
@@ -112,573 +102,499 @@ export function PublicEnrollment({ sessionId }: PublicEnrollmentProps) {
         ...session,
         enrolledStudentIds: newEnrolledIds
       });
-      
-    } catch (err) {
+
+      setLastEnrolledStudent(student);
+      setSearchTerm('');
+    } catch (err: any) {
       console.error(err);
-      alert('Erreur lors de l\'inscription.');
+      alert(err?.message || "Une erreur est survenue lors de l'inscription.");
     } finally {
       setEnrollingId(null);
     }
   };
 
-  const handleAddTeammate = (student: PublicStudent) => {
-    const requiredSize = session?.teamSize || 4;
-    if (selectedTeamStudents.length >= requiredSize) {
-      alert(`Votre équipe est déjà complète (${requiredSize} élèves).`);
-      return;
-    }
-    const missing = getMissingRequirements(student);
-    if (missing.length > 0) {
-      alert(`Impossible d'ajouter ${student.firstName} ${student.lastName} à l'équipe :\n- ${missing.join('\n- ')}\n\nChaque équipier doit être à jour des éléments requis.`);
-      return;
-    }
-    setSelectedTeamStudents(prev => [...prev, student]);
-    setTeamSearchTerm('');
-  };
+  const handleEnrollCustomStudent = async () => {
+    if (!session) return;
+    const cleanName = searchTerm.trim();
+    if (cleanName.length < 2) return;
 
-  const handleRemoveTeammate = (studentId: string) => {
-    setSelectedTeamStudents(prev => prev.filter(s => s.id !== studentId));
+    const parts = cleanName.split(/\s+/);
+    const lastName = (parts[0] || '').toUpperCase();
+    const firstName = parts.slice(1).join(' ') || 'Élève';
+
+    setEnrollingId('custom');
+    try {
+      const createdId = await addStudent({
+        lastName,
+        firstName,
+        schoolYear: session.schoolYear,
+        classGroup: 'Inconnue',
+        paid: 'NON',
+        parentalAuth: 'NON',
+        imageRights: 'NON',
+        licenseNumber: ''
+      });
+
+      const newPublic: PublicStudent = {
+        id: createdId,
+        lastName,
+        firstName,
+        schoolYear: session.schoolYear,
+        classGroup: 'Inconnue'
+      };
+
+      await enrollInSession(session.id, createdId);
+      
+      setStudents(prev => [newPublic, ...prev]);
+      const currentEnrolled = new Set(session.enrolledStudentIds || []);
+      currentEnrolled.add(createdId);
+      setSession({
+        ...session,
+        enrolledStudentIds: Array.from(currentEnrolled)
+      });
+
+      setLastEnrolledStudent(newPublic);
+      setSearchTerm('');
+    } catch (err: any) {
+      alert("Erreur lors de la création de l'élève.");
+    } finally {
+      setEnrollingId(null);
+    }
   };
 
   const handleValidateTeam = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!session) return;
-    const requiredSize = session.teamSize || 4;
-
-    if (!teamName.trim()) {
-      alert("Veuillez choisir un nom pour votre équipe.");
-      return;
-    }
-
-    if (selectedTeamStudents.length !== requiredSize) {
-      alert(`Il faut exactement ${requiredSize} élèves pour valider l'équipe (actuellement ${selectedTeamStudents.length}).`);
-      return;
-    }
-
-    const invalidTeammates = selectedTeamStudents.filter(s => getMissingRequirements(s).length > 0);
-    if (invalidTeammates.length > 0) {
-      alert(`Validation impossible : certains membres ne remplissent pas les conditions requises pour cette séance :\n${invalidTeammates.map(m => `- ${m.firstName} ${m.lastName} : ${getMissingRequirements(m).join(', ')}`).join('\n')}`);
-      return;
-    }
+    if (!session || !teamName.trim() || selectedTeamStudents.length !== (session.teamSize || 4)) return;
 
     setIsSubmittingTeam(true);
     try {
-      const studentIds = selectedTeamStudents.map(s => s.id);
-      const createdTeam = await enrollTeamInSession(session.id, teamName.trim(), studentIds);
+      await enrollTeamInSession(
+        session.id,
+        teamName.trim(),
+        selectedTeamStudents.map(s => s.id)
+      );
 
-      // Mettre à jour l'état local
       const currentEnrolled = new Set(session.enrolledStudentIds || []);
-      studentIds.forEach(id => currentEnrolled.add(id));
-      const updatedTeams = [...(session.teams || []), createdTeam];
-
+      selectedTeamStudents.forEach(s => currentEnrolled.add(s.id));
       setSession({
         ...session,
-        enrolledStudentIds: Array.from(currentEnrolled),
-        teams: updatedTeams
+        enrolledStudentIds: Array.from(currentEnrolled)
       });
 
       setTeamSuccessMessage(teamName.trim());
-      setTeamName('');
       setSelectedTeamStudents([]);
-      setTeamTab('list');
-    } catch (err) {
-      console.error(err);
-      alert("Erreur lors de l'enregistrement de l'équipe.");
+      setTeamName('');
+    } catch (err: any) {
+      alert(err?.message || "Erreur lors de la validation de l'équipe.");
     } finally {
       setIsSubmittingTeam(false);
     }
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-pulse text-slate-500 font-medium">Chargement...</div></div>;
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+          <p className="text-slate-600 font-bold text-sm">Chargement de la séance...</p>
+        </div>
+      </div>
+    );
   }
 
   if (error || !session) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="bg-red-50 text-red-600 p-4 rounded-xl border border-red-200">{error}</div></div>;
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-3xl p-6 text-center shadow-lg border border-slate-200 space-y-4">
+          <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-800">{error || "Séance introuvable"}</h2>
+          <button
+            onClick={handleGoBack}
+            className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-colors"
+          >
+            ← Retour au calendrier
+          </button>
+        </div>
+      </div>
+    );
   }
 
+  const enrolledCount = (session.enrolledStudentIds || []).length;
+  const isFull = session.maxParticipants !== undefined && enrolledCount >= session.maxParticipants;
+  const isPast = new Date(session.date).setHours(23, 59, 59, 999) < new Date().getTime();
   const isTeamMode = !!session.isTeamRegistration;
   const requiredTeamSize = session.teamSize || 4;
 
+  const formattedDate = new Date(session.date).toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long'
+  });
+
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex flex-col justify-center items-center pt-8">
-      <div className="w-full max-w-xl bg-white rounded-3xl shadow-md border border-slate-200/80 overflow-hidden">
-        {/* Header de la séance */}
-        <div className={`p-6 sm:p-8 text-white text-center ${isTeamMode ? 'bg-gradient-to-br from-purple-900 via-indigo-900 to-indigo-950' : 'bg-indigo-600'}`}>
-          <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-2 text-white">
-            {isTeamMode ? (
-              <span className="flex items-center gap-1.5 text-purple-200">
-                <Trophy className="w-3.5 h-3.5 text-amber-300" />
-                Tournoi / Événement par équipe
+    <div className="min-h-screen bg-slate-100/80 flex flex-col justify-between p-2 sm:p-6">
+      <div className="w-full max-w-xl mx-auto space-y-3">
+        {/* Navigation retour fluide */}
+        <button
+          onClick={handleGoBack}
+          className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600 hover:text-indigo-600 bg-white/80 hover:bg-white px-3.5 py-2 rounded-xl border border-slate-200 transition-colors shadow-2xs cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Voir tout le calendrier AS Rosa Parks</span>
+        </button>
+
+        {/* CARTE PRINCIPALE SIMPLIFIÉE */}
+        <div className="w-full bg-white rounded-3xl shadow-xl border border-slate-200/80 overflow-hidden">
+          {/* EN-TÊTE COMPACT ET CLAIR SANS PARAMÈTRES SUPERFLUS */}
+          <div className="p-4 sm:p-6 bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-200">
+                {isTeamMode ? '🏆 Tournoi par équipe' : 'Inscription à la séance'}
               </span>
+              {isFull ? (
+                <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  Complet
+                </span>
+              ) : isPast ? (
+                <span className="bg-slate-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  Passé
+                </span>
+              ) : (
+                <span className="bg-emerald-500 text-emerald-950 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  Ouvert
+                </span>
+              )}
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl font-black text-white leading-tight mb-2">
+              {session.name}
+            </h1>
+
+            {/* Récapitulatif simple et lisible en une ligne */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm text-indigo-100 font-medium">
+              <span className="flex items-center gap-1 font-bold text-white capitalize">
+                <Calendar className="w-4 h-4 text-indigo-300 shrink-0" />
+                {formattedDate}
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <Clock className="w-4 h-4 text-indigo-300 shrink-0" />
+                {session.time}{session.endTime ? ` - ${session.endTime}` : ''}
+              </span>
+              {session.location && (
+                <>
+                  <span>•</span>
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-4 h-4 text-indigo-300 shrink-0" />
+                    <span>{session.location}</span>
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* CORPS DE L'INSCRIPTION */}
+          <div className="p-4 sm:p-6 space-y-4">
+            {/* Si séance passée ou complète */}
+            {isFull ? (
+              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 text-center space-y-3">
+                <p className="font-black text-slate-800 text-base">La séance est complète</p>
+                <p className="text-xs text-slate-500">Toutes les places sont actuellement réservées.</p>
+                <button 
+                  onClick={handleGoBack}
+                  className="px-5 py-2.5 bg-slate-900 text-white font-bold rounded-xl text-xs hover:bg-slate-800 transition-colors"
+                >
+                  ← Retour au calendrier
+                </button>
+              </div>
+            ) : isPast ? (
+              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 text-center space-y-3">
+                <p className="font-black text-slate-800 text-base">Cette séance est passée</p>
+                <button 
+                  onClick={handleGoBack}
+                  className="px-5 py-2.5 bg-slate-900 text-white font-bold rounded-xl text-xs hover:bg-slate-800 transition-colors"
+                >
+                  ← Retour au calendrier
+                </button>
+              </div>
             ) : (
-              <span>Séance d'activité AS</span>
-            )}
-          </div>
-
-          <h1 className="text-2xl sm:text-3xl font-black mb-1.5 tracking-tight">{session.name}</h1>
-          <p className="text-sm opacity-90 font-medium">
-            📅 {new Date(session.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} à {session.time}
-            {session.endTime ? ` - ${session.endTime}` : ''}
-          </p>
-
-          <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
-            {isTeamMode && (
-              <div className="inline-flex items-center gap-2 bg-purple-500/80 backdrop-blur-sm px-3.5 py-1.5 rounded-full text-xs font-bold shadow-sm">
-                <Users className="w-4 h-4" /> Équipe requise : {requiredTeamSize} élèves
-              </div>
-            )}
-            {session.requireLicense && (
-              <div className="inline-flex items-center gap-2 bg-amber-500/80 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-medium">
-                <ShieldCheck className="w-4 h-4" /> Licence recommandée
-              </div>
-            )}
-            {session.targetAudience === 'adults' && (
-              <div className="inline-flex items-center gap-2 bg-rose-500/80 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-medium">
-                <Users className="w-4 h-4" /> Réservé aux adultes
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4 text-xs font-semibold opacity-90 flex items-center justify-center gap-4">
-            <span>
-              👥 {(session.enrolledStudentIds || []).length} {session.maxParticipants ? `/ ${session.maxParticipants}` : ''} inscrits
-            </span>
-            {isTeamMode && (
-              <span>
-                🏆 {(session.teams || []).length} équipe(s) complète(s)
-              </span>
-            )}
-          </div>
-        </div>
-        
-        <div className="p-6 sm:p-8">
-          {(() => {
-            const now = new Date();
-            const openDate = session.registrationOpenDate ? new Date(session.registrationOpenDate) : null;
-            const closeDate = session.registrationCloseDate ? new Date(session.registrationCloseDate) : null;
-            
-            const isTooEarly = openDate && now < openDate;
-            const isTooLate = closeDate && now > closeDate;
-            
-            const isFull = session.maxParticipants !== undefined && (session.enrolledStudentIds || []).length >= session.maxParticipants;
-            const isPast = new Date(session.date).setHours(0,0,0,0) < new Date().setHours(0,0,0,0);
-            
-            if (isFull || isPast || isTooEarly || isTooLate) {
-              return (
-                <div className="text-center py-8">
-                  <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <AlertTriangle className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-800 mb-2">Inscriptions closes</h3>
-                  <p className="text-slate-500 text-sm">
-                    {isTooEarly ? `Les inscriptions ouvriront le ${openDate?.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit' })}.` 
-                    : isTooLate ? `Les inscriptions sont fermées depuis le ${closeDate?.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit' })}.`
-                    : isFull ? "Le nombre maximum de participants a été atteint pour cette séance." 
-                    : "Cette séance est déjà passée."}
-                  </p>
-                  <button 
-                    onClick={() => window.location.href = '/'}
-                    className="mt-6 px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-sm transition-colors cursor-pointer"
-                  >
-                    Retour au calendrier
-                  </button>
-                </div>
-              );
-            }
-
-            // ================================================================
-            // MODE INSCRIPTION EN ÉQUIPE
-            // ================================================================
-            if (isTeamMode) {
-              const enrolledTeams = session.teams || [];
-
-              return (
-                <div className="space-y-6">
-                  {/* Bannière de confirmation après enregistrement */}
-                  {teamSuccessMessage && (
-                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-start gap-3 animate-in fade-in zoom-in-95">
-                      <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                        <Check className="w-5 h-5 stroke-[2.5]" />
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-bold text-emerald-900 text-sm">Inscription validée avec succès !</h4>
-                        <p className="text-xs text-emerald-700 mt-0.5">
-                          L'équipe <strong>« {teamSuccessMessage} »</strong> et ses {requiredTeamSize} membres sont officiellement enregistrés.
-                        </p>
+              <>
+                {/* MESSAGE DE SUCCÈS APRÈS VALIDATION */}
+                {lastEnrolledStudent && (
+                  <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 sm:p-5 flex items-start gap-3.5 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                      <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-emerald-950 font-black text-base sm:text-lg">
+                        Bravo {lastEnrolledStudent.firstName} !
+                      </h3>
+                      <p className="text-emerald-800 text-xs sm:text-sm font-semibold mt-0.5">
+                        Ton inscription pour <strong>{session.name}</strong> est bien validée. Rendez-vous le <strong>{formattedDate}</strong> à <strong>{session.time}</strong> !
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
                         <button
-                          onClick={() => setTeamSuccessMessage(null)}
-                          className="mt-2 text-xs font-bold text-emerald-800 hover:underline"
+                          onClick={handleGoBack}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-colors cursor-pointer"
                         >
-                          Fermer ce message
+                          ← Retour au planning complet
+                        </button>
+                        <button
+                          onClick={() => {
+                            setLastEnrolledStudent(null);
+                            setTimeout(() => inputRef.current?.focus(), 100);
+                          }}
+                          className="px-3.5 py-2 bg-white text-emerald-800 hover:bg-emerald-100 text-xs font-bold rounded-xl border border-emerald-300 transition-colors cursor-pointer"
+                        >
+                          Inscrire un autre élève
                         </button>
                       </div>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {/* Onglets : Créer mon équipe / Voir les équipes */}
-                  <div className="flex border-b border-slate-200 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setTeamTab('create')}
-                      className={`pb-3 px-3 text-sm font-bold transition-all border-b-2 cursor-pointer ${teamTab === 'create' ? 'border-purple-600 text-purple-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                {/* SUCCÈS MODE ÉQUIPE */}
+                {teamSuccessMessage && (
+                  <div className="bg-purple-50 border-2 border-purple-300 rounded-2xl p-4 flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-full bg-purple-600 text-white flex items-center justify-center shrink-0">
+                      <Trophy className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-purple-950 text-sm">Équipe inscrite avec succès !</h4>
+                      <p className="text-xs text-purple-800 mt-0.5">
+                        L'équipe <strong>« {teamSuccessMessage} »</strong> est enregistrée.
+                      </p>
+                      <button
+                        onClick={handleGoBack}
+                        className="mt-2.5 px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-lg cursor-pointer"
+                      >
+                        ← Retour au calendrier
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* MODE ÉQUIPE : ENREGISTREMENT */}
+                {isTeamMode && !teamSuccessMessage && (
+                  <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-3">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-purple-950">
+                      1. Nom de votre équipe :
+                    </label>
+                    <input
+                      type="text"
+                      value={teamName}
+                      onChange={e => setTeamName(e.target.value)}
+                      placeholder="Ex: Les Panthères, Team 3B..."
+                      className="w-full px-3.5 py-3 bg-white border border-purple-300 rounded-xl font-bold text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+
+                    <div className="flex items-center justify-between text-xs font-bold text-purple-900 pt-1">
+                      <span>2. Membres ({selectedTeamStudents.length} / {requiredTeamSize}) :</span>
+                      {selectedTeamStudents.length < requiredTeamSize && (
+                        <span className="text-purple-600">Ajoutez les {requiredTeamSize - selectedTeamStudents.length} membres ci-dessous</span>
+                      )}
+                    </div>
+
+                    {selectedTeamStudents.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedTeamStudents.map(m => (
+                          <span
+                            key={m.id}
+                            className="inline-flex items-center gap-1.5 bg-white border border-purple-200 text-purple-950 text-xs font-bold px-2.5 py-1 rounded-lg"
+                          >
+                            <span>{m.lastName} {m.firstName}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedTeamStudents(selectedTeamStudents.filter(s => s.id !== m.id))}
+                              className="text-slate-400 hover:text-red-500 cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {selectedTeamStudents.length === requiredTeamSize && teamName.trim() && (
+                      <button
+                        type="button"
+                        onClick={handleValidateTeam}
+                        disabled={isSubmittingTeam}
+                        className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-black text-sm rounded-xl transition-all shadow-md cursor-pointer"
+                      >
+                        {isSubmittingTeam ? "Validation en cours..." : `Valider l'équipe "${teamName}"`}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* ========================================================================= */}
+                {/* CASE ULTRA-VISIBLE POUR COMPLÉTER LE NOM DE L'ÉLÈVE                      */}
+                {/* ========================================================================= */}
+                <div className="space-y-3">
+                  <div className="bg-indigo-50/80 p-4 sm:p-5 rounded-2xl border-2 border-indigo-400 shadow-sm focus-within:border-indigo-600 focus-within:ring-4 focus-within:ring-indigo-100 transition-all">
+                    <label
+                      htmlFor="student-search-input"
+                      className="block text-sm sm:text-base font-black text-slate-900 mb-2 flex items-center justify-between"
                     >
-                      <span className="flex items-center gap-1.5">
-                        <UserPlus className="w-4 h-4" />
-                        Inscrire une équipe
+                      <span className="flex items-center gap-2">
+                        <UserCheck className="w-5 h-5 text-indigo-600" />
+                        <span>Nom ou prénom de l'élève à inscrire :</span>
                       </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTeamTab('list')}
-                      className={`pb-3 px-3 text-sm font-bold transition-all border-b-2 cursor-pointer ${teamTab === 'list' ? 'border-purple-600 text-purple-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Users className="w-4 h-4" />
-                        Équipes déjà inscrites ({enrolledTeams.length})
+                      <span className="text-[11px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
+                        Étape 1/1
                       </span>
-                    </button>
+                    </label>
+
+                    {/* CHAMP DE SAISIE PRINCIPAL TRÈS VISIBLE */}
+                    <div className="relative">
+                      <input
+                        ref={inputRef}
+                        id="student-search-input"
+                        type="text"
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        placeholder="Tapez votre nom (ex: Martin, Dupont, Lucas...)"
+                        className="w-full pl-11 pr-10 py-3.5 sm:py-4 bg-white border-2 border-indigo-300 focus:border-indigo-600 rounded-xl text-base sm:text-lg font-black text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none shadow-inner"
+                        autoComplete="off"
+                        autoFocus
+                      />
+                      <Search className="w-5 h-5 text-indigo-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+
+                      {searchTerm.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchTerm('');
+                            inputRef.current?.focus();
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-slate-600 absolute right-3 top-1/2 -translate-y-1/2 rounded-full hover:bg-slate-100 cursor-pointer"
+                          title="Effacer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {searchTerm.trim().length === 0 ? (
+                      <p className="text-xs text-slate-500 font-medium mt-2 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span>Tapez au moins 2 lettres de votre nom pour vous trouver instantanément.</span>
+                      </p>
+                    ) : searchTerm.trim().length === 1 ? (
+                      <p className="text-xs text-slate-500 mt-2">Tapez une deuxième lettre...</p>
+                    ) : (
+                      <p className="text-xs text-indigo-900 font-bold mt-2">
+                        {filteredStudents.length} élève(s) trouvé(s) :
+                      </p>
+                    )}
                   </div>
 
-                  {teamTab === 'create' ? (
-                    <form onSubmit={handleValidateTeam} className="space-y-5">
-                      <div className="bg-purple-50/70 border border-purple-200/80 rounded-2xl p-4">
-                        <div className="flex items-center gap-2 text-purple-900 font-bold text-xs">
-                          <Sparkles className="w-4 h-4 text-purple-600" />
-                          Règle de validation de l'équipe :
-                        </div>
-                        <p className="text-xs text-purple-800 mt-1 leading-relaxed">
-                          Pour être validée, chaque équipe doit être composée d'exactement <strong>{requiredTeamSize} élèves</strong> de l'AS.
-                        </p>
-                      </div>
-
-                      {/* Étape 1: Nom de l'équipe */}
-                      <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                          1. Nom de l'équipe *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={teamName}
-                          onChange={e => setTeamName(e.target.value)}
-                          placeholder="Ex: Les Aigles de Rosa Parks, Team 4A..."
-                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-900 font-semibold text-sm"
-                        />
-                      </div>
-
-                      {/* Étape 2: Roster des élèves */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                            2. Membres de l'équipe ({selectedTeamStudents.length} / {requiredTeamSize})
-                          </label>
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${selectedTeamStudents.length === requiredTeamSize ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-purple-100 text-purple-800'}`}>
-                            {selectedTeamStudents.length === requiredTeamSize 
-                              ? "Équipe complète ✓" 
-                              : `Encore ${requiredTeamSize - selectedTeamStudents.length} élève(s) requis`}
-                          </span>
-                        </div>
-
-                        {/* Liste des membres déjà sélectionnés */}
-                        <div className="space-y-2 mb-3">
-                          {selectedTeamStudents.map((st, idx) => (
-                            <div key={st.id} className="p-3 bg-purple-50/60 rounded-xl border border-purple-200 flex items-center justify-between gap-3 animate-in fade-in">
-                              <div className="flex items-center gap-2.5">
-                                <span className="w-6 h-6 rounded-full bg-purple-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
-                                  {idx + 1}
-                                </span>
-                                <div>
-                                  <div className="font-bold text-slate-900 text-sm">
-                                    {st.lastName} {st.firstName}
-                                    {st.classGroup && (
-                                      <span className="text-xs text-slate-500 font-normal ml-2">({st.classGroup})</span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-1.5 mt-0.5">
-                                    {String(st.paid).toUpperCase() === 'OUI' ? (
-                                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-1.5 py-0.2 rounded">€ Réglé</span>
-                                    ) : (
-                                      <span className="text-[10px] font-semibold text-rose-700 bg-rose-100/70 px-1.5 py-0.2 rounded">€ Manquant</span>
-                                    )}
-                                    {String(st.parentalAuth).toUpperCase() === 'OUI' && (
-                                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-1.5 py-0.2 rounded">AP Validée</span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveTeammate(st.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                                title="Retirer de l'équipe"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ))}
-
-                          {selectedTeamStudents.length === 0 && (
-                            <div className="p-4 text-center border border-dashed border-slate-300 rounded-xl bg-slate-50 text-slate-500 text-xs">
-                              Aucun élève sélectionné. Recherchez le nom de vos coéquipiers ci-dessous.
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Recherche et ajout de coéquipiers si équipe incomplète */}
-                        {selectedTeamStudents.length < requiredTeamSize && (
-                          <div className="space-y-2 pt-2 border-t border-slate-100">
-                            <label className="block text-xs font-semibold text-slate-600">
-                              Ajouter un coéquipier (recherche par nom ou prénom) :
-                            </label>
-                            <div className="relative">
-                              <input
-                                type="text"
-                                placeholder="Tapez le nom d'un élève..."
-                                value={teamSearchTerm}
-                                onChange={e => setTeamSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                              />
-                              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                            </div>
-
-                            {/* Suggestions */}
-                            {teamSearchTerm.trim().length >= 2 && (
-                              <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100 overflow-hidden shadow-sm max-h-48 overflow-y-auto">
-                                {filteredTeamCandidates.map(candidate => {
-                                  // Vérifier si déjà dans une autre équipe
-                                  const alreadyInAnotherTeam = enrolledTeams.some(t => (t.studentIds || []).includes(candidate.id));
-
-                                  return (
-                                    <div key={candidate.id} className="p-2.5 flex items-center justify-between hover:bg-slate-50 gap-2">
-                                      <div>
-                                        <span className="font-semibold text-slate-800 text-xs">
-                                          {candidate.lastName} {candidate.firstName}
-                                        </span>
-                                        {candidate.classGroup && (
-                                          <span className="text-[11px] text-slate-500 ml-1.5 font-medium">({candidate.classGroup})</span>
-                                        )}
-                                      </div>
-
-                                      {alreadyInAnotherTeam ? (
-                                        <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-semibold border border-amber-200">
-                                          Déjà inscrit dans une autre équipe
-                                        </span>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleAddTeammate(candidate)}
-                                          className="flex items-center gap-1 px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                                        >
-                                          <UserPlus className="w-3.5 h-3.5" />
-                                          Ajouter
-                                        </button>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-
-                                {filteredTeamCandidates.length === 0 && (
-                                  <div className="p-3 text-xs text-slate-500 text-center">
-                                    Aucun élève trouvé pour cette recherche.
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Bouton de validation conditionnel */}
-                      <div className="pt-2">
-                        {selectedTeamStudents.length === requiredTeamSize ? (
-                          <button
-                            type="submit"
-                            disabled={isSubmittingTeam || !teamName.trim()}
-                            className="w-full py-3.5 px-4 bg-purple-600 hover:bg-purple-700 active:scale-[0.99] text-white font-black rounded-xl text-sm transition-all shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                          >
-                            <Trophy className="w-4 h-4 text-amber-300" />
-                            <span>
-                              {isSubmittingTeam 
-                                ? "Validation en cours..." 
-                                : `Valider l'inscription de l'équipe (${requiredTeamSize}/${requiredTeamSize} élèves)`}
-                            </span>
-                          </button>
-                        ) : (
-                          <div className="p-3.5 bg-slate-100 border border-slate-200 text-slate-500 rounded-xl text-center text-xs font-semibold">
-                            ⚠️ Inscription bloquée : l'équipe doit compter exactement <strong>{requiredTeamSize} élèves</strong> pour être validée ({selectedTeamStudents.length}/{requiredTeamSize} actuellement).
-                          </div>
-                        )}
-                      </div>
-                    </form>
-                  ) : (
-                    /* Liste des équipes inscrites */
-                    <div className="space-y-4">
-                      {enrolledTeams.length === 0 ? (
-                        <div className="text-center py-10 bg-slate-50 border border-dashed border-slate-200 rounded-2xl">
-                          <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                          <p className="text-sm font-semibold text-slate-700">Aucune équipe inscrite pour l'instant</p>
-                          <p className="text-xs text-slate-500 mt-1">Soyez les premiers à inscrire votre équipe !</p>
+                  {/* RÉSULTATS DE RECHERCHE EN 1 CLIC */}
+                  {searchTerm.trim().length >= 2 && (
+                    <div className="space-y-2 animate-in fade-in duration-150">
+                      {filteredStudents.length === 0 ? (
+                        <div className="text-center py-6 px-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                          <p className="font-bold text-slate-700 text-sm">
+                            Aucun élève trouvé pour « {searchTerm} »
+                          </p>
+                          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                            Vérifiez l'orthographe du nom ou pré-inscrivez-vous directement :
+                          </p>
                           <button
                             type="button"
-                            onClick={() => setTeamTab('create')}
-                            className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-colors"
+                            onClick={handleEnrollCustomStudent}
+                            disabled={enrollingId === 'custom'}
+                            className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
                           >
-                            Inscrire mon équipe
+                            <span>M'inscrire avec le nom « {searchTerm.trim()} »</span>
+                            <Check className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       ) : (
-                        <div className="space-y-3">
-                          {enrolledTeams.map((team, idx) => (
-                            <div key={team.id || idx} className="p-4 bg-white border border-purple-200/80 rounded-2xl shadow-xs">
-                              <div className="flex items-center justify-between mb-2.5">
-                                <h4 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                                  <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-xs flex items-center justify-center font-black">
-                                    {idx + 1}
+                        filteredStudents.map(student => {
+                          const isEnrolled = (session.enrolledStudentIds || []).includes(student.id);
+                          const isTeamSelected = selectedTeamStudents.some(s => s.id === student.id);
+
+                          return (
+                            <div
+                              key={student.id}
+                              className={`p-3 sm:p-3.5 rounded-xl border-2 transition-all flex items-center justify-between gap-3 ${
+                                isEnrolled
+                                  ? 'bg-emerald-50/60 border-emerald-300'
+                                  : isTeamSelected
+                                  ? 'bg-purple-50/60 border-purple-300'
+                                  : 'bg-white border-slate-200 hover:border-indigo-400 hover:shadow-xs'
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-black text-slate-900 text-sm sm:text-base">
+                                    {student.lastName} {student.firstName}
                                   </span>
-                                  <span>{team.name}</span>
-                                </h4>
-                                <span className="text-xs font-bold text-purple-800 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200">
-                                  {team.studentIds?.length || 0} / {requiredTeamSize} élèves
-                                </span>
+                                  {student.classGroup && (
+                                    <span className="bg-slate-100 text-slate-700 text-[11px] font-bold px-2 py-0.5 rounded-md">
+                                      Classe : {student.classGroup}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
 
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 border-t border-slate-100">
-                                {(team.studentIds || []).map(sid => {
-                                  const st = students.find(s => s.id === sid);
-                                  return (
-                                    <div key={sid} className="text-xs text-slate-700 bg-slate-50 px-2.5 py-1.5 rounded-lg flex items-center justify-between">
-                                      <span className="font-medium text-slate-800">
-                                        {st ? `${st.lastName} ${st.firstName}` : sid}
-                                      </span>
-                                      {st?.classGroup && (
-                                        <span className="text-[10px] text-slate-500 font-semibold bg-white border border-slate-200 px-1.5 py-0.5 rounded">
-                                          {st.classGroup}
-                                        </span>
-                                      )}
-                                    </div>
-                                  );
-                                })}
+                              <div className="shrink-0">
+                                {isTeamMode ? (
+                                  isTeamSelected ? (
+                                    <span className="text-xs font-bold text-purple-700 bg-purple-100 px-3 py-1.5 rounded-lg">
+                                      Sélectionné ✓
+                                    </span>
+                                  ) : isEnrolled ? (
+                                    <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg">
+                                      Déjà inscrit
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      disabled={selectedTeamStudents.length >= requiredTeamSize}
+                                      onClick={() => setSelectedTeamStudents([...selectedTeamStudents, student])}
+                                      className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold text-xs rounded-lg cursor-pointer"
+                                    >
+                                      + Ajouter à l'équipe
+                                    </button>
+                                  )
+                                ) : isEnrolled ? (
+                                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200">
+                                    <Check className="w-3.5 h-3.5 text-emerald-700 stroke-[3]" />
+                                    <span>Inscrit(e) ✓</span>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEnroll(student)}
+                                    disabled={enrollingId === student.id}
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 sm:py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                                  >
+                                    {enrollingId === student.id ? (
+                                      <span>Inscription...</span>
+                                    ) : (
+                                      <>
+                                        <span>M'inscrire</span>
+                                        <Check className="w-4 h-4 stroke-[2.5]" />
+                                      </>
+                                    )}
+                                  </button>
+                                )}
                               </div>
                             </div>
-                          ))}
-                        </div>
+                          );
+                        })
                       )}
                     </div>
                   )}
                 </div>
-              );
-            }
-
-            // ================================================================
-            // MODE INSCRIPTION INDIVIDUELLE (STANDARD)
-            // ================================================================
-            return (
-              <>
-                <div className="mb-6">
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Recherchez votre nom</label>
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      placeholder="Entrez votre nom ou prénom..." 
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-lg"
-                      value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
-                    />
-                    <Search className="w-5 h-5 text-slate-400 absolute left-3 top-3.5" />
-                  </div>
-                  {searchTerm.length > 0 && searchTerm.length < 2 && (
-                    <p className="text-xs text-slate-500 mt-2">Tapez au moins 2 caractères...</p>
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  {filteredStudents.map(student => {
-                    const isEnrolled = (session.enrolledStudentIds || []).includes(student.id);
-                    
-                    return (
-                      <div key={student.id} className={`p-4 rounded-xl border ${isEnrolled ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'} flex items-center justify-between gap-4`}>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-bold text-slate-900 text-base sm:text-lg flex items-center gap-2 flex-wrap">
-                            <span>{student.lastName} {student.firstName}</span>
-                            {student.classGroup && (
-                              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                                {student.classGroup}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Statuts administratifs pour l'information de l'élève */}
-                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                            {String(student.paid).toUpperCase() === 'OUI' ? (
-                              <span title="Cotisation réglée" className="inline-flex items-center gap-1 text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">
-                                € Cotisation réglée
-                              </span>
-                            ) : (
-                              <span title="Cotisation non réglée" className="inline-flex items-center gap-1 text-[11px] font-semibold bg-rose-100 text-rose-800 px-2 py-0.5 rounded-md">
-                                €🚫 Cotisation manquante
-                              </span>
-                            )}
-
-                            {String(student.parentalAuth).toUpperCase() === 'OUI' ? (
-                              <span title="Autorisation parentale validée" className="inline-flex items-center gap-1 text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">
-                                AP validée
-                              </span>
-                            ) : (
-                              <span title="Autorisation parentale manquante" className="inline-flex items-center gap-1 text-[11px] font-semibold bg-rose-100 text-rose-800 px-2 py-0.5 rounded-md">
-                                AP🚫 Autorisation manquante
-                              </span>
-                            )}
-
-                            {String(student.swimmingCertificate).toUpperCase() !== 'OUI' && (
-                              <span title="Attestation savoir nager non validée" className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
-                                🏊‍♂️🚫 Savoir nager non validé
-                              </span>
-                            )}
-
-                            {String(student.imageRights).toUpperCase() !== 'OUI' && (
-                              <span title="Droit à l'image non validé" className="inline-flex items-center gap-1 text-[11px] font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
-                                📷🚫 Droit à l'image non validé
-                              </span>
-                            )}
-                          </div>
-
-                          {session.requireLicense && !student.licenseNumber && !isEnrolled && (
-                            <div className="text-xs text-amber-700 font-medium flex items-center gap-1 mt-2">
-                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                              <span>Pas de licence enregistrée (l'inscription reste possible)</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="shrink-0">
-                          {isEnrolled ? (
-                            <div className="flex items-center gap-1.5 text-emerald-600 font-bold bg-emerald-100 px-3 py-1.5 rounded-lg text-sm">
-                              <CheckCircle2 className="w-4 h-4" /> Inscrit
-                            </div>
-                          ) : (
-                            <button 
-                              onClick={() => handleEnroll(student)}
-                              disabled={enrollingId === student.id || (session.maxParticipants !== undefined && (session.enrolledStudentIds || []).length >= session.maxParticipants)}
-                              className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${(session.maxParticipants !== undefined && (session.enrolledStudentIds || []).length >= session.maxParticipants) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
-                            >
-                              {enrollingId === student.id ? '...' : (session.maxParticipants !== undefined && (session.enrolledStudentIds || []).length >= session.maxParticipants ? 'Complet' : 'S\'inscrire')}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  
-                  {searchTerm.length >= 2 && filteredStudents.length === 0 && (
-                    <div className="text-center text-slate-500 py-8">
-                      Aucun élève trouvé avec ce nom.
-                    </div>
-                  )}
-                </div>
               </>
-            );
-          })()}
+            )}
+          </div>
         </div>
       </div>
     </div>

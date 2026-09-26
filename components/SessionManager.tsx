@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Student, Session } from '../types';
-import { PlusCircle, Calendar, Trash2, CheckCircle2, Circle, Users, Save, Link2, Edit2, ShieldCheck, AlertCircle } from 'lucide-react';
+import { PlusCircle, Calendar, Trash2, CheckCircle2, Circle, Users, Save, Link2, Edit2, ShieldCheck, AlertCircle, Search } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
 import { 
   getSessionsList, saveSessionApi, deleteSessionApi, 
@@ -704,13 +704,16 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
             
             <div className="p-6 flex-1 flex flex-col overflow-hidden">
               <div className="flex gap-4 mb-4">
-                <input 
-                  type="text" 
-                  placeholder="Rechercher un élève..." 
-                  className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                />
+                <div className="relative flex-1">
+                  <input 
+                    type="text" 
+                    placeholder="Rechercher un élève par nom ou prénom..." 
+                    className="w-full pl-10 pr-4 py-2.5 bg-white border-2 border-indigo-200 focus:border-indigo-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-100 font-semibold text-sm shadow-2xs"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                  />
+                  <Search className="w-4 h-4 text-indigo-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
               </div>
 
               {/* Section Équipes si la séance est en mode équipe */}
