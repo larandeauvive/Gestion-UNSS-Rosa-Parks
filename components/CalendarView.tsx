@@ -30,6 +30,14 @@ type CalendarEvent = {
   raw: Session | Convocation;
 };
 
+// Helper for exact date matching without UTC timezone shift
+function isEventOnDay(eventDate: string, day: Date): boolean {
+  if (!eventDate) return false;
+  const dayStr = format(day, 'yyyy-MM-dd');
+  const cleanDateStr = eventDate.slice(0, 10);
+  return cleanDateStr === dayStr;
+}
+
 export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -208,7 +216,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
         const updateData = {
           name: newEventName || 'Séance',
           date: format(clickedDate, 'yyyy-MM-dd'),
-          time: newEventTime,
+          time: newEventTime || '13:30',
           endTime: newEventEndTime,
           location: newEventLocation,
           meetingTime: newEventMeetingTime,
@@ -233,8 +241,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
           const convUpdateData = {
             id: sessionDoc.convocationId,
             competitionName: newEventName || 'Séance',
-            departureDate: format(clickedDate, 'yyyy-MM-dd') + (newEventTime ? `T${newEventTime}` : 'T00:00'),
-            returnDate: format(clickedDate, 'yyyy-MM-dd') + (newEventEndTime ? `T${newEventEndTime}` : 'T23:59'),
+            departureDate: format(clickedDate, 'yyyy-MM-dd') + (newEventTime ? `T${newEventTime}` : 'T13:30'),
+            returnDate: format(clickedDate, 'yyyy-MM-dd') + (newEventEndTime ? `T${newEventEndTime}` : 'T17:00'),
             needSnack: newEventNeedSnack ? 'OUI' : 'NON',
             meetingTime: newEventMeetingTime,
             meetingLocation: newEventMeetingLocation,
@@ -247,7 +255,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
         const sessionData: Partial<Session> = {
           name: newEventName || 'Séance',
           date: format(clickedDate, 'yyyy-MM-dd'),
-          time: newEventTime,
+          time: newEventTime || '13:30',
           endTime: newEventEndTime,
           location: newEventLocation,
           meetingTime: newEventMeetingTime,
@@ -274,8 +282,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
         if (newEventGenerateConvocation && sessionResult?.id) {
            const convData: Partial<Convocation> = {
               competitionName: newEventName || 'Séance',
-              departureDate: format(clickedDate, 'yyyy-MM-dd') + (newEventTime ? `T${newEventTime}` : 'T00:00'),
-              returnDate: format(clickedDate, 'yyyy-MM-dd') + (newEventEndTime ? `T${newEventEndTime}` : 'T23:59'),
+              departureDate: format(clickedDate, 'yyyy-MM-dd') + (newEventTime ? `T${newEventTime}` : 'T13:30'),
+              returnDate: format(clickedDate, 'yyyy-MM-dd') + (newEventEndTime ? `T${newEventEndTime}` : 'T17:00'),
               guides: '',
               needSnack: newEventNeedSnack ? 'OUI' : 'NON',
               needPicnic: 'NON',
@@ -630,7 +638,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic }
         </div>
         <div className="grid grid-cols-7 auto-rows-fr">
           {days.map((day, dayIdx) => {
-            const dayEvents = events.filter(e => isSameDay(new Date(e.date), day)).sort((a, b) => {
+            const dayEvents = events.filter(e => isEventOnDay(e.date, day)).sort((a, b) => {
               const timeA = a.type === 'session' ? (a.raw as Session).time : (a.raw as Convocation).departureDate?.includes('T') ? (a.raw as Convocation).departureDate.split('T')[1] : '';
               const timeB = b.type === 'session' ? (b.raw as Session).time : (b.raw as Convocation).departureDate?.includes('T') ? (b.raw as Convocation).departureDate.split('T')[1] : '';
               return (timeA || '').localeCompare(timeB || '');

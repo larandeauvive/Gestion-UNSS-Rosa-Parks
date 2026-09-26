@@ -27,6 +27,7 @@ import {
   saveLocalSession,
   getLocalConvocations,
   setLocalConvocations,
+  saveLocalConvocation,
   getLocalEveningSlots,
   setLocalEveningSlots,
   getLocalStaffMembers,
@@ -521,46 +522,64 @@ function mergeSessionsWithLocal(remoteList: Session[], schoolYear?: string): Ses
   return result;
 }
 
+const supabaseTableMissing: Record<string, boolean> = {};
+
+function isTableMissingInSupabase(tableName: string): boolean {
+  return !!supabaseTableMissing[tableName];
+}
+
+function markTableMissingInSupabase(tableName: string, error: any) {
+  if (error && (error.code === 'PGRST205' || (error.message && error.message.includes('schema cache')))) {
+    supabaseTableMissing[tableName] = true;
+  }
+}
+
 export const getSessionsList = async (schoolYear?: string): Promise<Session[]> => {
-  try {
-    let query = supabase.from('sessions').select('*').order('date', { ascending: false });
-    if (schoolYear) {
-      query = query.eq('school_year', schoolYear);
-    }
-    const { data, error } = await query;
-    if (error) {
-      console.warn('Supabase getSessionsList error, falling back to API:', error.message);
-      const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
-      const serverList = await fetchJson<Session[]>(`${API_BASE}/sessions${q}`);
-      return mergeSessionsWithLocal(serverList, schoolYear);
-    }
-    const mapped = (data || []).map(rowToSession);
-    return mergeSessionsWithLocal(mapped, schoolYear);
-  } catch {
+  if (!isTableMissingInSupabase('sessions')) {
     try {
-      const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
-      const serverList = await fetchJson<Session[]>(`${API_BASE}/sessions${q}`);
-      return mergeSessionsWithLocal(serverList, schoolYear);
-    } catch {
-      return getLocalSessions(schoolYear);
+      let query = supabase.from('sessions').select('*').order('date', { ascending: false });
+      if (schoolYear) {
+        query = query.eq('school_year', schoolYear);
+      }
+      const { data, error } = await query;
+      if (error) {
+        markTableMissingInSupabase('sessions', error);
+      } else {
+        const mapped = (data || []).map(rowToSession);
+        return mergeSessionsWithLocal(mapped, schoolYear);
+      }
+    } catch (err: any) {
+      markTableMissingInSupabase('sessions', err);
     }
+  }
+
+  try {
+    const q = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+    const serverList = await fetchJson<Session[]>(`${API_BASE}/sessions${q}`);
+    return mergeSessionsWithLocal(serverList, schoolYear);
+  } catch {
+    return getLocalSessions(schoolYear);
   }
 };
 
 export const getSession = async (id: string): Promise<Session> => {
-  try {
-    const { data, error } = await supabase.from('sessions').select('*').eq('id', id).single();
-    if (error || !data) throw error || new Error('Séance introuvable');
-    return rowToSession(data);
-  } catch {
+  if (!isTableMissingInSupabase('sessions')) {
     try {
-      return await fetchJson<Session>(`${API_BASE}/sessions/${encodeURIComponent(id)}`);
-    } catch {
-      const all = getLocalSessions();
-      const s = all.find(item => item.id === id);
-      if (!s) throw new Error('Séance introuvable');
-      return s;
+      const { data, error } = await supabase.from('sessions').select('*').eq('id', id).single();
+      if (!error && data) return rowToSession(data);
+      if (error) markTableMissingInSupabase('sessions', error);
+    } catch (err: any) {
+      markTableMissingInSupabase('sessions', err);
     }
+  }
+
+  try {
+    return await fetchJson<Session>(`${API_BASE}/sessions/${encodeURIComponent(id)}`);
+  } catch {
+    const all = getLocalSessions();
+    const s = all.find(item => item.id === id);
+    if (!s) throw new Error('Séance introuvable');
+    return s;
   }
 };
 
@@ -572,33 +591,27 @@ export const addSessionApi = async (data: Omit<Session, 'id'>): Promise<string> 
 
   const row = sessionToRow(sessionWithId);
 
-  try {
-    const { error } = await supabase.from('sessions').insert(row);
-    if (error) {
-      console.warn('Supabase insert session error, falling back to backend API:', error.message);
-      try {
-        const res = await fetchJson<{ id: string }>(`${API_BASE}/sessions`, {
-          method: 'POST',
-          body: JSON.stringify(sessionWithId)
-        });
-        return res.id || newId;
-      } catch (apiErr) {
-        console.warn('Backend API addSession fallback failed, using local save:', apiErr);
+  if (!isTableMissingInSupabase('sessions')) {
+    try {
+      const { error } = await supabase.from('sessions').insert(row);
+      if (error) {
+        markTableMissingInSupabase('sessions', error);
+      } else {
         return newId;
       }
+    } catch (err: any) {
+      markTableMissingInSupabase('sessions', err);
     }
+  }
+
+  try {
+    const res = await fetchJson<{ id: string }>(`${API_BASE}/sessions`, {
+      method: 'POST',
+      body: JSON.stringify(sessionWithId)
+    });
+    return res.id || newId;
+  } catch (apiErr) {
     return newId;
-  } catch {
-    try {
-      const res = await fetchJson<{ id: string }>(`${API_BASE}/sessions`, {
-        method: 'POST',
-        body: JSON.stringify(sessionWithId)
-      });
-      return res.id || newId;
-    } catch (apiErr) {
-      console.warn('Backend API addSession fallback failed, using local save:', apiErr);
-      return newId;
-    }
   }
 };
 
@@ -607,28 +620,26 @@ export const updateSessionApi = async (id: string, data: Partial<Session>): Prom
   saveLocalSession({ ...data, id });
 
   const row = sessionToRow(data);
-  try {
-    const { error } = await supabase.from('sessions').update(row).eq('id', id);
-    if (error) {
-      console.warn('Supabase update session error, falling back to API:', error.message);
-      try {
-        await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(id)}`, {
-          method: 'PUT',
-          body: JSON.stringify(data)
-        });
-      } catch (apiErr) {
-        console.warn('Backend API updateSession fallback error, using local save:', apiErr);
-      }
-    }
-  } catch {
+  if (!isTableMissingInSupabase('sessions')) {
     try {
-      await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(id)}`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-      });
-    } catch (apiErr) {
-      console.warn('Backend API updateSession fallback failed, using local save:', apiErr);
+      const { error } = await supabase.from('sessions').update(row).eq('id', id);
+      if (error) {
+        markTableMissingInSupabase('sessions', error);
+      } else {
+        return;
+      }
+    } catch (err: any) {
+      markTableMissingInSupabase('sessions', err);
     }
+  }
+
+  try {
+    await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  } catch (apiErr) {
+    // Local save already active
   }
 };
 
@@ -774,91 +785,126 @@ export const deleteTeamFromSession = async (
   }
 };
 
+function mergeConvocationsWithLocal(remoteList: Convocation[], schoolYear?: string): Convocation[] {
+  const localList = getLocalConvocations(schoolYear);
+  const map = new Map<string, Convocation>();
+  for (const c of remoteList || []) {
+    if (c && c.id) map.set(c.id, c);
+  }
+  for (const c of localList || []) {
+    if (c && c.id) {
+      const existing = map.get(c.id);
+      map.set(c.id, existing ? { ...existing, ...c } : c);
+    }
+  }
+  const result = Array.from(map.values());
+  result.sort((a, b) => new Date(b.departureDate).getTime() - new Date(a.departureDate).getTime());
+  return result;
+}
+
 // ----------------------------------------------------
 // CONVOCATIONS
 // ----------------------------------------------------
 export const getConvocationsList = async (schoolYear?: string): Promise<Convocation[]> => {
-  try {
-    let query = supabase.from('convocations').select('*').order('departure_date', { ascending: false });
-    if (schoolYear) {
-      query = query.eq('school_year', schoolYear);
+  if (!isTableMissingInSupabase('convocations')) {
+    try {
+      let query = supabase.from('convocations').select('*').order('departure_date', { ascending: false });
+      if (schoolYear) {
+        query = query.eq('school_year', schoolYear);
+      }
+      const { data, error } = await query;
+      if (error) {
+        markTableMissingInSupabase('convocations', error);
+      } else {
+        const mapped = (data || []).map(rowToConvocation);
+        return mergeConvocationsWithLocal(mapped, schoolYear);
+      }
+    } catch (err: any) {
+      markTableMissingInSupabase('convocations', err);
     }
-    const { data, error } = await query;
-    if (error) throw error;
-    return (data || []).map(rowToConvocation);
+  }
+
+  try {
+    const queryStr = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+    const serverList = await fetchJson<Convocation[]>(`${API_BASE}/convocations${queryStr}`);
+    return mergeConvocationsWithLocal(serverList, schoolYear);
   } catch {
-    const query = schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
-    return fetchJson<Convocation[]>(`${API_BASE}/convocations${query}`);
+    return getLocalConvocations(schoolYear);
   }
 };
 
 export const addConvocationApi = async (data: Omit<Convocation, 'id'>): Promise<string> => {
   const newId = generateSafeId('cnv');
-  const row = convocationToRow({ ...data, id: newId });
-  try {
-    const { error } = await supabase.from('convocations').insert(row);
-    if (error) {
-      console.warn('Supabase insert convocation error, falling back to API:', error.message);
-      try {
-        const res = await fetchJson<{ id: string }>(`${API_BASE}/convocations`, {
-          method: 'POST',
-          body: JSON.stringify(data)
-        });
-        return res.id || newId;
-      } catch (apiErr) {
-        console.warn('Backend API addConvocation error:', apiErr);
+  const convWithId = { ...data, id: newId };
+  saveLocalConvocation(convWithId);
+
+  const row = convocationToRow(convWithId);
+
+  if (!isTableMissingInSupabase('convocations')) {
+    try {
+      const { error } = await supabase.from('convocations').insert(row);
+      if (error) {
+        markTableMissingInSupabase('convocations', error);
+      } else {
         return newId;
       }
+    } catch (err: any) {
+      markTableMissingInSupabase('convocations', err);
     }
-    return newId;
+  }
+
+  try {
+    const res = await fetchJson<{ id: string }>(`${API_BASE}/convocations`, {
+      method: 'POST',
+      body: JSON.stringify(convWithId)
+    });
+    return res.id || newId;
   } catch {
-    try {
-      const res = await fetchJson<{ id: string }>(`${API_BASE}/convocations`, {
-        method: 'POST',
-        body: JSON.stringify(data)
-      });
-      return res.id || newId;
-    } catch {
-      return newId;
-    }
+    return newId;
   }
 };
 
 export const updateConvocationApi = async (id: string, data: Partial<Convocation>): Promise<void> => {
+  saveLocalConvocation({ ...data, id });
   const row = convocationToRow(data);
-  try {
-    const { error } = await supabase.from('convocations').update(row).eq('id', id);
-    if (error) {
-      console.warn('Supabase update convocation error, falling back to API:', error.message);
-      try {
-        await fetchJson(`${API_BASE}/convocations/${encodeURIComponent(id)}`, {
-          method: 'PUT',
-          body: JSON.stringify(data)
-        });
-      } catch (apiErr) {
-        console.warn('Backend API updateConvocation error:', apiErr);
-      }
-    }
-  } catch {
+
+  if (!isTableMissingInSupabase('convocations')) {
     try {
-      await fetchJson(`${API_BASE}/convocations/${encodeURIComponent(id)}`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-      });
-    } catch {
-      // Ignorer erreur non bloquante
+      const { error } = await supabase.from('convocations').update(row).eq('id', id);
+      if (error) {
+        markTableMissingInSupabase('convocations', error);
+      } else {
+        return;
+      }
+    } catch (err: any) {
+      markTableMissingInSupabase('convocations', err);
     }
+  }
+
+  try {
+    await fetchJson(`${API_BASE}/convocations/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  } catch {
+    // Ignorer erreur distante
   }
 };
 
 export const saveConvocationApi = async (data: Partial<Convocation> & { id?: string }): Promise<{ id: string }> => {
-  if (data.id) {
-    const { id, ...rest } = data;
-    await updateConvocationApi(id, rest);
-    return { id };
-  } else {
-    const newId = await addConvocationApi(data as Omit<Convocation, 'id'>);
-    return { id: newId };
+  try {
+    if (data.id) {
+      const { id, ...rest } = data;
+      await updateConvocationApi(id, rest);
+      return { id };
+    } else {
+      const newId = await addConvocationApi(data as Omit<Convocation, 'id'>);
+      return { id: newId };
+    }
+  } catch (err) {
+    const fallbackId = data.id || generateSafeId('cnv');
+    saveLocalConvocation({ ...data, id: fallbackId });
+    return { id: fallbackId };
   }
 };
 

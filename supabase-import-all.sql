@@ -46,7 +46,9 @@ CREATE TABLE IF NOT EXISTS public.sessions (
   need_snack BOOLEAN DEFAULT FALSE,
   description TEXT,
   require_license BOOLEAN DEFAULT FALSE,
-  school_year TEXT NOT NULL,
+  require_parental_auth BOOLEAN DEFAULT FALSE,
+  require_swimming_certificate BOOLEAN DEFAULT FALSE,
+  school_year TEXT NOT NULL DEFAULT '2026-2027',
   enrolled_student_ids TEXT[],
   present_student_ids TEXT[],
   convocation_id TEXT,
@@ -57,8 +59,17 @@ CREATE TABLE IF NOT EXISTS public.sessions (
   cafeteria_time TEXT,
   return_time TEXT,
   registration_open_date TEXT,
-  registration_close_date TEXT
+  registration_close_date TEXT,
+  is_team_registration BOOLEAN DEFAULT FALSE,
+  team_size INTEGER,
+  teams JSONB
 );
+
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS require_parental_auth BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS require_swimming_certificate BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS is_team_registration BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS team_size INTEGER;
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS teams JSONB;
 
 CREATE TABLE IF NOT EXISTS public.convocations (
   id TEXT PRIMARY KEY,

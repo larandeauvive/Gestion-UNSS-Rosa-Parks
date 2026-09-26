@@ -201,45 +201,47 @@ export function setLocalSessions(sessions: Session[]): void {
 
 export function saveLocalSession(session: Partial<Session>): Session {
   const all = getLocalSessions();
-  const id = session.id || crypto.randomUUID();
-  const newSession: Session = {
+  const id = session.id || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : ('ses_' + Math.random().toString(36).slice(2, 9)));
+  const idx = all.findIndex(s => s.id === id);
+  const existing = idx >= 0 ? all[idx] : null;
+
+  const mergedSession: Session = {
     id,
-    name: session.name || '',
-    date: session.date || '',
-    time: session.time || '',
-    endTime: session.endTime,
-    location: session.location,
-    teacherIds: session.teacherIds,
-    needSnack: session.needSnack ?? false,
-    description: session.description,
-    requireLicense: session.requireLicense ?? false,
-    requireParentalAuth: session.requireParentalAuth ?? false,
-    requireSwimmingCertificate: session.requireSwimmingCertificate ?? false,
-    schoolYear: session.schoolYear || '2026-2027',
-    enrolledStudentIds: session.enrolledStudentIds || [],
-    presentStudentIds: session.presentStudentIds || [],
-    convocationId: session.convocationId,
-    maxParticipants: session.maxParticipants,
-    targetAudience: session.targetAudience || 'students',
-    meetingTime: session.meetingTime,
-    meetingLocation: session.meetingLocation,
-    cafeteriaTime: session.cafeteriaTime,
-    returnTime: session.returnTime,
-    registrationOpenDate: session.registrationOpenDate,
-    registrationCloseDate: session.registrationCloseDate,
-    isTeamRegistration: session.isTeamRegistration ?? false,
-    teamSize: session.teamSize,
-    teams: session.teams || []
+    name: session.name !== undefined ? session.name : (existing?.name || ''),
+    date: session.date !== undefined ? session.date : (existing?.date || ''),
+    time: session.time !== undefined ? session.time : (existing?.time || '13:30'),
+    endTime: session.endTime !== undefined ? session.endTime : existing?.endTime,
+    location: session.location !== undefined ? session.location : existing?.location,
+    teacherIds: session.teacherIds !== undefined ? session.teacherIds : existing?.teacherIds,
+    needSnack: session.needSnack !== undefined ? session.needSnack : (existing?.needSnack ?? false),
+    description: session.description !== undefined ? session.description : existing?.description,
+    requireLicense: session.requireLicense !== undefined ? session.requireLicense : (existing?.requireLicense ?? false),
+    requireParentalAuth: session.requireParentalAuth !== undefined ? session.requireParentalAuth : (existing?.requireParentalAuth ?? false),
+    requireSwimmingCertificate: session.requireSwimmingCertificate !== undefined ? session.requireSwimmingCertificate : (existing?.requireSwimmingCertificate ?? false),
+    schoolYear: session.schoolYear !== undefined ? session.schoolYear : (existing?.schoolYear || '2026-2027'),
+    enrolledStudentIds: session.enrolledStudentIds !== undefined ? session.enrolledStudentIds : (existing?.enrolledStudentIds || []),
+    presentStudentIds: session.presentStudentIds !== undefined ? session.presentStudentIds : (existing?.presentStudentIds || []),
+    convocationId: session.convocationId !== undefined ? session.convocationId : existing?.convocationId,
+    maxParticipants: session.maxParticipants !== undefined ? session.maxParticipants : existing?.maxParticipants,
+    targetAudience: session.targetAudience !== undefined ? session.targetAudience : (existing?.targetAudience || 'students'),
+    meetingTime: session.meetingTime !== undefined ? session.meetingTime : existing?.meetingTime,
+    meetingLocation: session.meetingLocation !== undefined ? session.meetingLocation : existing?.meetingLocation,
+    cafeteriaTime: session.cafeteriaTime !== undefined ? session.cafeteriaTime : existing?.cafeteriaTime,
+    returnTime: session.returnTime !== undefined ? session.returnTime : existing?.returnTime,
+    registrationOpenDate: session.registrationOpenDate !== undefined ? session.registrationOpenDate : existing?.registrationOpenDate,
+    registrationCloseDate: session.registrationCloseDate !== undefined ? session.registrationCloseDate : existing?.registrationCloseDate,
+    isTeamRegistration: session.isTeamRegistration !== undefined ? session.isTeamRegistration : (existing?.isTeamRegistration ?? false),
+    teamSize: session.teamSize !== undefined ? session.teamSize : existing?.teamSize,
+    teams: session.teams !== undefined ? session.teams : (existing?.teams || [])
   };
 
-  const idx = all.findIndex(s => s.id === id);
   if (idx >= 0) {
-    all[idx] = newSession;
+    all[idx] = mergedSession;
   } else {
-    all.push(newSession);
+    all.push(mergedSession);
   }
   setLocalSessions(all);
-  return newSession;
+  return mergedSession;
 }
 
 // CONVOCATIONS
@@ -251,6 +253,42 @@ export function getLocalConvocations(schoolYear?: string): Convocation[] {
 
 export function setLocalConvocations(convocations: Convocation[]): void {
   safeSet(STORAGE_KEYS.CONVOCATIONS, convocations);
+}
+
+export function saveLocalConvocation(conv: Partial<Convocation>): Convocation {
+  const all = getLocalConvocations();
+  const id = conv.id || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : ('cnv_' + Math.random().toString(36).slice(2, 9)));
+  const idx = all.findIndex(c => c.id === id);
+  const existing = idx >= 0 ? all[idx] : null;
+
+  const merged: Convocation = {
+    id,
+    competitionName: conv.competitionName !== undefined ? conv.competitionName : (existing?.competitionName || ''),
+    departureDate: conv.departureDate !== undefined ? conv.departureDate : (existing?.departureDate || ''),
+    returnDate: conv.returnDate !== undefined ? conv.returnDate : (existing?.returnDate || ''),
+    guides: conv.guides !== undefined ? conv.guides : (existing?.guides || ''),
+    teacherIds: conv.teacherIds !== undefined ? conv.teacherIds : existing?.teacherIds,
+    needSnack: conv.needSnack !== undefined ? conv.needSnack : (existing?.needSnack || 'NON'),
+    needPicnic: conv.needPicnic !== undefined ? conv.needPicnic : (existing?.needPicnic || 'NON'),
+    schoolYear: conv.schoolYear !== undefined ? conv.schoolYear : (existing?.schoolYear || '2026-2027'),
+    studentIds: conv.studentIds !== undefined ? conv.studentIds : (existing?.studentIds || []),
+    tshirtManagerId: conv.tshirtManagerId !== undefined ? conv.tshirtManagerId : existing?.tshirtManagerId,
+    snackManagerIds: conv.snackManagerIds !== undefined ? conv.snackManagerIds : existing?.snackManagerIds,
+    sessionId: conv.sessionId !== undefined ? conv.sessionId : existing?.sessionId,
+    targetAudience: conv.targetAudience !== undefined ? conv.targetAudience : (existing?.targetAudience || 'students'),
+    meetingTime: conv.meetingTime !== undefined ? conv.meetingTime : existing?.meetingTime,
+    meetingLocation: conv.meetingLocation !== undefined ? conv.meetingLocation : existing?.meetingLocation,
+    cafeteriaTime: conv.cafeteriaTime !== undefined ? conv.cafeteriaTime : existing?.cafeteriaTime,
+    returnTime: conv.returnTime !== undefined ? conv.returnTime : existing?.returnTime
+  };
+
+  if (idx >= 0) {
+    all[idx] = merged;
+  } else {
+    all.push(merged);
+  }
+  setLocalConvocations(all);
+  return merged;
 }
 
 // EVENING SLOTS
