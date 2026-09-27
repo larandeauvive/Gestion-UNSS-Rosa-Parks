@@ -92,8 +92,32 @@ export const SimplifiedEnrollmentModal: React.FC<SimplifiedEnrollmentModalProps>
   const isTeamMode = !!session.isTeamRegistration;
   const requiredTeamSize = session.teamSize || 4;
 
+  const getStudentMissingRequirements = (student: PublicStudent): string[] => {
+    const missing: string[] = [];
+    if (session.requirePaid && String(student.paid).toUpperCase() !== 'OUI') {
+      missing.push("Cotisation à jour");
+    }
+    if (session.requireLicense) {
+      const hasLic = !!(student.licenseNumber && student.licenseNumber.trim().length > 0) || student.hasLicense === true;
+      if (!hasLic) missing.push("Numéro de licence");
+    }
+    if (session.requireParentalAuth && String(student.parentalAuth).toUpperCase() !== 'OUI') {
+      missing.push("Autorisation parentale (AP)");
+    }
+    if (session.requireSwimmingCertificate && String(student.swimmingCertificate).toUpperCase() !== 'OUI') {
+      missing.push("Attestation savoir-nager");
+    }
+    return missing;
+  };
+
   const handleEnroll = async (student: PublicStudent) => {
     if (!session || isFull || isPast) return;
+
+    const missing = getStudentMissingRequirements(student);
+    if (missing.length > 0) {
+      setErrorMessage(`Inscription impossible pour ${student.firstName} ${student.lastName} : critères non remplis (${missing.join(', ')}). Veuillez régulariser votre situation auprès de votre enseignant d'EPS.`);
+      return;
+    }
 
     setEnrollingId(student.id);
     setErrorMessage(null);
@@ -119,6 +143,17 @@ export const SimplifiedEnrollmentModal: React.FC<SimplifiedEnrollmentModalProps>
 
   // Inscription rapide si l'élève n'est pas encore dans la liste officielle
   const handleEnrollCustomStudent = async () => {
+    if (session.requirePaid || session.requireLicense || session.requireParentalAuth || session.requireSwimmingCertificate) {
+      const requiredList = [
+        session.requirePaid && "cotisation à jour",
+        session.requireLicense && "numéro de licence",
+        session.requireParentalAuth && "autorisation parentale",
+        session.requireSwimmingCertificate && "attestation savoir-nager"
+      ].filter(Boolean).join(', ');
+      setErrorMessage(`Cette séance exige des critères obligatoires (${requiredList}). Les élèves non encore répertoriés doivent d'abord finaliser leur inscription et documents auprès du professeur d'EPS.`);
+      return;
+    }
+
     const cleanName = searchTerm.trim();
     if (cleanName.length < 2) return;
 
@@ -166,6 +201,15 @@ export const SimplifiedEnrollmentModal: React.FC<SimplifiedEnrollmentModalProps>
   const handleValidateTeam = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!teamName.trim() || teamMembers.length !== requiredTeamSize) return;
+
+    // Vérifier les critères de chaque coéquipier
+    for (const member of teamMembers) {
+      const missing = getStudentMissingRequirements(member);
+      if (missing.length > 0) {
+        setErrorMessage(`Inscription d'équipe impossible : ${member.firstName} ${member.lastName} ne remplit pas les critères requis (${missing.join(', ')}).`);
+        return;
+      }
+    }
 
     setIsSubmittingTeam(true);
     setErrorMessage(null);
@@ -252,6 +296,14 @@ export const SimplifiedEnrollmentModal: React.FC<SimplifiedEnrollmentModalProps>
                     <span className="flex items-center gap-1">
                       <MapPin className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
                       <span className="truncate max-w-[140px] sm:max-w-none">{session.location}</span>
+                    </span>
+                  </>
+                )}
+                {session.requirePaid && (
+                  <>
+                    <span>•</span>
+                    <span className="inline-flex items-center gap-1 bg-emerald-500/30 text-emerald-200 border border-emerald-400/50 text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full">
+                      💳 Cotisation à jour requise
                     </span>
                   </>
                 )}
@@ -491,6 +543,8 @@ export const SimplifiedEnrollmentModal: React.FC<SimplifiedEnrollmentModalProps>
                     filteredStudents.map(student => {
                       const isEnrolled = enrolledIds.includes(student.id);
                       const isTeamSelected = teamMembers.some(t => t.id === student.id);
+                      const missingReqs = getStudentMissingRequirements(student);
+                      const hasMissingReqs = missingReqs.length > 0;
 
                       return (
                         <div
@@ -500,18 +554,64 @@ export const SimplifiedEnrollmentModal: React.FC<SimplifiedEnrollmentModalProps>
                               ? 'bg-emerald-50/60 border-emerald-300'
                               : isTeamSelected
                               ? 'bg-purple-50/60 border-purple-300'
+                              : hasMissingReqs
+                              ? 'bg-slate-50/70 border-slate-200'
                               : 'bg-white border-slate-200 hover:border-indigo-400 hover:shadow-xs'
                           }`}
                         >
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-black text-slate-900 text-sm sm:text-base">
                                 {student.lastName} {student.firstName}
                               </span>
                               {student.classGroup && (
                                 <span className="bg-slate-100 text-slate-700 text-[11px] font-bold px-2 py-0.5 rounded-md">
-                                  Classe : {student.classGroup}
+                                  {student.classGroup}
                                 </span>
+                              )}
+                              {session.requirePaid && (
+                                String(student.paid).toUpperCase() === 'OUI' ? (
+                                  <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                                    Cotisation ✓
+                                  </span>
+                                ) : (
+                                  <span className="bg-rose-50 text-rose-800 border border-rose-200 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                                    Cotisation ⚠️
+                                  </span>
+                                )
+                              )}
+                              {session.requireLicense && (
+                                (!!(student.licenseNumber && student.licenseNumber.trim().length > 0) || student.hasLicense === true) ? (
+                                  <span className="bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                                    Licence ✓
+                                  </span>
+                                ) : (
+                                  <span className="bg-rose-50 text-rose-800 border border-rose-200 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                                    Licence ⚠️
+                                  </span>
+                                )
+                              )}
+                              {session.requireParentalAuth && (
+                                String(student.parentalAuth).toUpperCase() === 'OUI' ? (
+                                  <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                                    AP ✓
+                                  </span>
+                                ) : (
+                                  <span className="bg-rose-50 text-rose-800 border border-rose-200 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                                    AP ⚠️
+                                  </span>
+                                )
+                              )}
+                              {session.requireSwimmingCertificate && (
+                                String(student.swimmingCertificate).toUpperCase() === 'OUI' ? (
+                                  <span className="bg-cyan-50 text-cyan-800 border border-cyan-200 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                                    Nage ✓
+                                  </span>
+                                ) : (
+                                  <span className="bg-rose-50 text-rose-800 border border-rose-200 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                                    Nage ⚠️
+                                  </span>
+                                )
                               )}
                             </div>
                           </div>
@@ -526,6 +626,15 @@ export const SimplifiedEnrollmentModal: React.FC<SimplifiedEnrollmentModalProps>
                                 <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg">
                                   Déjà inscrit
                                 </span>
+                              ) : hasMissingReqs ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setErrorMessage(`Élève non éligible pour cette séance : ${student.firstName} ${student.lastName} ne remplit pas les critères requis (${missingReqs.join(', ')}).`)}
+                                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold rounded-lg cursor-pointer"
+                                  title={`Critères manquants : ${missingReqs.join(', ')}`}
+                                >
+                                  Critères manquants ⚠️
+                                </button>
                               ) : (
                                 <button
                                   type="button"
@@ -541,6 +650,15 @@ export const SimplifiedEnrollmentModal: React.FC<SimplifiedEnrollmentModalProps>
                                 <Check className="w-3.5 h-3.5 text-emerald-700 stroke-[3]" />
                                 <span>Inscrit(e) ✓</span>
                               </span>
+                            ) : hasMissingReqs ? (
+                              <button
+                                type="button"
+                                onClick={() => handleEnroll(student)}
+                                className="inline-flex items-center gap-1 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                                title={`Critères manquants : ${missingReqs.join(', ')}`}
+                              >
+                                <span>Critères manquants ⚠️</span>
+                              </button>
                             ) : (
                               <button
                                 type="button"

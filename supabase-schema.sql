@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS public.sessions (
   need_snack BOOLEAN DEFAULT FALSE,
   description TEXT,
   require_license BOOLEAN DEFAULT FALSE,
+  require_parental_auth BOOLEAN DEFAULT FALSE,
+  require_swimming_certificate BOOLEAN DEFAULT FALSE,
+  require_paid BOOLEAN DEFAULT FALSE,
   school_year TEXT NOT NULL,
   enrolled_student_ids TEXT[],
   present_student_ids TEXT[],
@@ -65,6 +68,9 @@ CREATE TABLE IF NOT EXISTS public.sessions (
 );
 
 -- Migrations douces si la table existe déjà
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS require_parental_auth BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS require_swimming_certificate BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS require_paid BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS is_team_registration BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS team_size INTEGER;
 ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS teams JSONB DEFAULT '[]'::jsonb;

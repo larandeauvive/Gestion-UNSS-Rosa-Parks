@@ -6,6 +6,7 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import {
   getAllStudents,
+  getStudentById,
   getPublicStudentsDirectory,
   insertStudent,
   updateStudentById,
@@ -394,12 +395,67 @@ async function startServer() {
   app.post('/api/sessions/:id/enroll', async (req, res) => {
     try {
       const { studentId } = req.body;
+      if (!studentId) return res.status(400).json({ error: 'Identifiant élève manquant' });
+
       const session = await getSessionById(req.params.id);
       if (!session) return res.status(404).json({ error: 'Séance non trouvée' });
 
       const enrolled = new Set(session.enrolledStudentIds || []);
+      if (session.maxParticipants && enrolled.size >= session.maxParticipants && !enrolled.has(studentId)) {
+        return res.status(400).json({ error: 'La séance est complète.' });
+      }
+
+      // Vérification rigoureuse des critères d'inscription
+      const student = await getStudentById(studentId);
+      if (student) {
+        if (session.requirePaid && String(student.paid).toUpperCase() !== 'OUI') {
+          return res.status(400).json({ 
+            error: `Cotisation requise : ${student.firstName} ${student.lastName} n'est pas à jour de cotisation (paiement non validé).` 
+          });
+        }
+        if (session.requireLicense) {
+          const hasLic = !!(student.licenseNumber && student.licenseNumber.trim().length > 0) || student.opussChecked === true;
+          if (!hasLic) {
+            return res.status(400).json({ 
+              error: `Numéro de licence obligatoire : ${student.firstName} ${student.lastName} ne dispose pas d'un numéro de licence enregistré.` 
+            });
+          }
+        }
+        if (session.requireParentalAuth && String(student.parentalAuth).toUpperCase() !== 'OUI') {
+          return res.status(400).json({ 
+            error: `Autorisation parentale obligatoire : ${student.firstName} ${student.lastName} n'a pas d'autorisation parentale validée.` 
+          });
+        }
+        if (session.requireSwimmingCertificate && String(student.swimmingCertificate).toUpperCase() !== 'OUI') {
+          return res.status(400).json({ 
+            error: `Attestation savoir-nager requise : ${student.firstName} ${student.lastName} n'a pas d'attestation savoir-nager validée.` 
+          });
+        }
+      }
+
       enrolled.add(studentId);
-      await updateSessionById(req.params.id, { enrolledStudentIds: Array.from(enrolled) });
+      const newEnrolled = Array.from(enrolled);
+      await updateSessionById(req.params.id, { enrolledStudentIds: newEnrolled });
+
+      // Synchroniser la convocation liée (session.convocationId ou convocation.sessionId)
+      if (session.convocationId) {
+        try {
+          await updateConvocationById(session.convocationId, { studentIds: newEnrolled });
+        } catch (cErr) {
+          console.warn('Erreur sync convocation:', cErr);
+        }
+      }
+      try {
+        const allConvs = await getConvocations(session.schoolYear);
+        const linkedConvs = allConvs.filter(c => c.sessionId === req.params.id && c.id !== session.convocationId);
+        for (const c of linkedConvs) {
+          const merged = Array.from(new Set([...(c.studentIds || []), studentId]));
+          await updateConvocationById(c.id, { studentIds: merged });
+        }
+      } catch (cErr) {
+        console.warn('Erreur sync convocations secondaires:', cErr);
+      }
+
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -413,14 +469,65 @@ async function startServer() {
       const session = await getSessionById(req.params.id);
       if (!session) return res.status(404).json({ error: 'Séance non trouvée' });
 
+      // Vérifier les critères pour chaque membre de l'équipe
+      const memberIds: string[] = team?.studentIds || [];
+      for (const mId of memberIds) {
+        const student = await getStudentById(mId);
+        if (student) {
+          if (session.requirePaid && String(student.paid).toUpperCase() !== 'OUI') {
+            return res.status(400).json({ 
+              error: `Cotisation requise : ${student.firstName} ${student.lastName} n'est pas à jour de cotisation.` 
+            });
+          }
+          if (session.requireLicense) {
+            const hasLic = !!(student.licenseNumber && student.licenseNumber.trim().length > 0) || student.opussChecked === true;
+            if (!hasLic) {
+              return res.status(400).json({ 
+                error: `Licence obligatoire : ${student.firstName} ${student.lastName} n'a pas de licence valide.` 
+              });
+            }
+          }
+          if (session.requireParentalAuth && String(student.parentalAuth).toUpperCase() !== 'OUI') {
+            return res.status(400).json({ 
+              error: `Autorisation parentale obligatoire : ${student.firstName} ${student.lastName} n'a pas d'autorisation parentale.` 
+            });
+          }
+          if (session.requireSwimmingCertificate && String(student.swimmingCertificate).toUpperCase() !== 'OUI') {
+            return res.status(400).json({ 
+              error: `Attestation savoir-nager requise : ${student.firstName} ${student.lastName} n'a pas d'attestation de natation.` 
+            });
+          }
+        }
+      }
+
       const enrolled = new Set(session.enrolledStudentIds || []);
-      (team.studentIds || []).forEach((id: string) => enrolled.add(id));
+      memberIds.forEach((id: string) => enrolled.add(id));
 
       const teams = [...(session.teams || []), team];
+      const newEnrolled = Array.from(enrolled);
       await updateSessionById(req.params.id, { 
-        enrolledStudentIds: Array.from(enrolled),
+        enrolledStudentIds: newEnrolled,
         teams
       });
+
+      if (session.convocationId) {
+        try {
+          await updateConvocationById(session.convocationId, { studentIds: newEnrolled });
+        } catch (cErr) {
+          console.warn('Erreur sync convocation:', cErr);
+        }
+      }
+      try {
+        const allConvs = await getConvocations(session.schoolYear);
+        const linkedConvs = allConvs.filter(c => c.sessionId === req.params.id && c.id !== session.convocationId);
+        for (const c of linkedConvs) {
+          const merged = Array.from(new Set([...(c.studentIds || []), ...memberIds]));
+          await updateConvocationById(c.id, { studentIds: merged });
+        }
+      } catch (cErr) {
+        console.warn('Erreur sync convocations secondaires:', cErr);
+      }
+
       res.json({ success: true, team });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

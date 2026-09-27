@@ -30,6 +30,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
     date: new Date().toISOString().split('T')[0],
     time: '13:30',
     requireLicense: false,
+    requirePaid: false,
     teacherIds: []
   });
 
@@ -66,6 +67,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
           requireLicense: !!formData.requireLicense,
           requireParentalAuth: !!formData.requireParentalAuth,
           requireSwimmingCertificate: !!formData.requireSwimmingCertificate,
+          requirePaid: !!formData.requirePaid,
           isTeamRegistration: !!formData.isTeamRegistration,
           teamSize: formData.isTeamRegistration ? (Number(formData.teamSize) || 4) : undefined
         });
@@ -100,6 +102,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
           requireLicense: !!formData.requireLicense,
           requireParentalAuth: !!formData.requireParentalAuth,
           requireSwimmingCertificate: !!formData.requireSwimmingCertificate,
+          requirePaid: !!formData.requirePaid,
           isTeamRegistration: !!formData.isTeamRegistration,
           teamSize: formData.isTeamRegistration ? (Number(formData.teamSize) || 4) : undefined,
           teams: []
@@ -135,6 +138,13 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
     if (enrolled.has(studentId)) {
       enrolled.delete(studentId);
     } else {
+      if (activeSession.requirePaid) {
+        const student = students.find(s => s.id === studentId);
+        if (student && String(student.paid).toUpperCase() !== 'OUI') {
+          const proceed = confirm(`Attention : ${student.firstName} ${student.lastName} n'est pas à jour de cotisation (paiement non validé).\n\nVoulez-vous tout de même l'inscrire à cette séance ?`);
+          if (!proceed) return;
+        }
+      }
       enrolled.add(studentId);
     }
     
@@ -212,6 +222,7 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                 date: new Date().toISOString().slice(0, 10),
                 time: '13:30',
                 requireLicense: false,
+                requirePaid: false,
                 enrolledStudentIds: [],
                 presentStudentIds: []
               });
@@ -488,7 +499,20 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                   <span className="text-[11px] text-slate-500 font-medium">Contrôle à l'inscription</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${formData.requirePaid ? 'bg-indigo-50/80 border-indigo-300 text-indigo-950' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'}`}>
+                    <input 
+                      type="checkbox" 
+                      className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 mt-0.5"
+                      checked={formData.requirePaid || false}
+                      onChange={e => setFormData({...formData, requirePaid: e.target.checked})}
+                    />
+                    <div>
+                      <span className="text-xs font-bold block">Cotisation à jour</span>
+                      <span className="text-[10px] text-slate-500 leading-tight block">Paiement validé exigé</span>
+                    </div>
+                  </label>
+
                   <label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${formData.requireLicense ? 'bg-indigo-50/80 border-indigo-300 text-indigo-950' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'}`}>
                     <input 
                       type="checkbox" 
@@ -641,6 +665,9 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                       <Users className="w-3.5 h-3.5 text-purple-700" />
                       Équipe ({activeSession.teamSize || 4} élèves / équipe)
                     </span>
+                  )}
+                  {activeSession.requirePaid && (
+                    <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2 py-0.5 rounded-full border border-emerald-200">💳 Cotisation à jour requise</span>
                   )}
                   {activeSession.requireLicense && (
                     <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-0.5 rounded-full border border-indigo-200">🪪 Licence requise</span>
@@ -809,6 +836,13 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                                 {String(s.swimmingCertificate).toUpperCase() !== 'OUI' && <span title="Savoir nager non validé" className="text-sm">🏊‍♂️🚫</span>}
                                 {String(s.imageRights).toUpperCase() !== 'OUI' && <span title="Droit à l'image non validé" className="text-sm">📷🚫</span>}
                                 {String(s.paid).toUpperCase() !== 'OUI' && <span title="Paiement manquant" className="text-sm text-rose-500 font-bold leading-none">€🚫</span>}
+                                {activeSession.requirePaid && (
+                                  String(s.paid).toUpperCase() === 'OUI' ? (
+                                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded border border-emerald-300">Cotisation OK ✓</span>
+                                  ) : (
+                                    <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-1.5 py-0.5 rounded border border-rose-300">Cotisation non payée ⚠️</span>
+                                  )
+                                )}
                                 <span>{s.lastName} {s.firstName}</span>
                               </div>
                               <span className="text-xs text-slate-500">{s.classGroup}</span>
@@ -846,6 +880,13 @@ export function SessionManager({ students, activeYear }: SessionManagerProps) {
                                 {String(s.swimmingCertificate).toUpperCase() !== 'OUI' && <span title="Savoir nager non validé" className="text-sm">🏊‍♂️🚫</span>}
                                 {String(s.imageRights).toUpperCase() !== 'OUI' && <span title="Droit à l'image non validé" className="text-sm">📷🚫</span>}
                                 {String(s.paid).toUpperCase() !== 'OUI' && <span title="Paiement manquant" className="text-sm text-rose-500 font-bold leading-none">€🚫</span>}
+                                {activeSession.requirePaid && (
+                                  String(s.paid).toUpperCase() === 'OUI' ? (
+                                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded border border-emerald-300">Cotisation OK ✓</span>
+                                  ) : (
+                                    <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-1.5 py-0.5 rounded border border-rose-300">Cotisation non payée ⚠️</span>
+                                  )
+                                )}
                                 <span>{s.lastName} {s.firstName}</span>
                             </div>
                             <span className="text-xs text-slate-400">{s.classGroup}</span>

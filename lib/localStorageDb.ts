@@ -218,6 +218,7 @@ export function saveLocalSession(session: Partial<Session>): Session {
     requireLicense: session.requireLicense !== undefined ? session.requireLicense : (existing?.requireLicense ?? false),
     requireParentalAuth: session.requireParentalAuth !== undefined ? session.requireParentalAuth : (existing?.requireParentalAuth ?? false),
     requireSwimmingCertificate: session.requireSwimmingCertificate !== undefined ? session.requireSwimmingCertificate : (existing?.requireSwimmingCertificate ?? false),
+    requirePaid: session.requirePaid !== undefined ? session.requirePaid : (existing?.requirePaid ?? false),
     schoolYear: session.schoolYear !== undefined ? session.schoolYear : (existing?.schoolYear || '2026-2027'),
     enrolledStudentIds: session.enrolledStudentIds !== undefined ? session.enrolledStudentIds : (existing?.enrolledStudentIds || []),
     presentStudentIds: session.presentStudentIds !== undefined ? session.presentStudentIds : (existing?.presentStudentIds || []),
@@ -244,6 +245,11 @@ export function saveLocalSession(session: Partial<Session>): Session {
   return mergedSession;
 }
 
+export function deleteLocalSession(id: string): void {
+  const all = getLocalSessions().filter(s => s.id !== id);
+  setLocalSessions(all);
+}
+
 // CONVOCATIONS
 export function getLocalConvocations(schoolYear?: string): Convocation[] {
   const convs = safeGet<Convocation[]>(STORAGE_KEYS.CONVOCATIONS, []);
@@ -253,6 +259,11 @@ export function getLocalConvocations(schoolYear?: string): Convocation[] {
 
 export function setLocalConvocations(convocations: Convocation[]): void {
   safeSet(STORAGE_KEYS.CONVOCATIONS, convocations);
+}
+
+export function deleteLocalConvocation(id: string): void {
+  const all = getLocalConvocations().filter(c => c.id !== id);
+  setLocalConvocations(all);
 }
 
 export function saveLocalConvocation(conv: Partial<Convocation>): Convocation {
@@ -279,7 +290,8 @@ export function saveLocalConvocation(conv: Partial<Convocation>): Convocation {
     meetingTime: conv.meetingTime !== undefined ? conv.meetingTime : existing?.meetingTime,
     meetingLocation: conv.meetingLocation !== undefined ? conv.meetingLocation : existing?.meetingLocation,
     cafeteriaTime: conv.cafeteriaTime !== undefined ? conv.cafeteriaTime : existing?.cafeteriaTime,
-    returnTime: conv.returnTime !== undefined ? conv.returnTime : existing?.returnTime
+    returnTime: conv.returnTime !== undefined ? conv.returnTime : existing?.returnTime,
+    selectedCriteria: conv.selectedCriteria !== undefined ? conv.selectedCriteria : existing?.selectedCriteria
   };
 
   if (idx >= 0) {

@@ -18,7 +18,9 @@ import {
 import { RegistrationFormDoc } from '../types';
 import { RegistrationFormModal } from './RegistrationFormModal';
 import { SimplifiedEnrollmentModal } from './SimplifiedEnrollmentModal';
+import { ConfirmDialog } from './ConfirmDialog';
 import { downloadRegistrationForm, formatFileSize } from '../lib/registrationFormHelper';
+import { getStudentCategory } from '../lib/categoryUtils';
 
 interface Props {
   students: Student[];
@@ -65,6 +67,9 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
   // Session en cours d'inscription (Fenêtre d'inscription simplifiée)
   const [enrollingSession, setEnrollingSession] = useState<Session | null>(null);
 
+  // Suppression d'événement via boîte de dialogue in-app
+  const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null);
+
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
@@ -83,6 +88,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
   const [newEventRequireLicense, setNewEventRequireLicense] = useState(false);
   const [newEventRequireParentalAuth, setNewEventRequireParentalAuth] = useState(false);
   const [newEventRequireSwimmingCertificate, setNewEventRequireSwimmingCertificate] = useState(false);
+  const [newEventRequirePaid, setNewEventRequirePaid] = useState(false);
   const [newEventMaxParticipants, setNewEventMaxParticipants] = useState<number | ''>('');
   const [newEventRegistrationOpenDate, setNewEventRegistrationOpenDate] = useState('');
   const [newEventRegistrationCloseDate, setNewEventRegistrationCloseDate] = useState('');
@@ -125,6 +131,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
     setNewEventRequireLicense(session.requireLicense ?? false);
     setNewEventRequireParentalAuth(!!session.requireParentalAuth);
     setNewEventRequireSwimmingCertificate(!!session.requireSwimmingCertificate);
+    setNewEventRequirePaid(!!session.requirePaid);
     setNewEventMaxParticipants(session.maxParticipants || '');
     setNewEventRegistrationOpenDate(session.registrationOpenDate || '');
     setNewEventRegistrationCloseDate(session.registrationCloseDate || '');
@@ -146,25 +153,41 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
 
       const convoEvents: CalendarEvent[] = convos
         .filter(c => c.departureDate && !isNaN(new Date(c.departureDate).getTime()) && !c.sessionId)
-        .map(c => ({
-          id: c.id,
-          type: 'convocation' as const,
-          date: c.departureDate,
-          title: c.competitionName || 'Convocation',
-          studentIds: c.studentIds || [],
-          raw: c
-        }));
+        .map(c => {
+          const linkedSession = sessions.find(s => s.convocationId === c.id || s.id === c.sessionId);
+          const mergedStudentIds = Array.from(new Set([
+            ...(c.studentIds || []),
+            ...(linkedSession?.enrolledStudentIds || []),
+            ...(linkedSession?.presentStudentIds || [])
+          ]));
+          return {
+            id: c.id,
+            type: 'convocation' as const,
+            date: c.departureDate,
+            title: c.competitionName || 'Convocation',
+            studentIds: mergedStudentIds,
+            raw: c
+          };
+        });
 
       const sessionEvents: CalendarEvent[] = sessions
         .filter(s => s.date && !isNaN(new Date(s.date).getTime()))
-        .map(s => ({
-          id: s.id,
-          type: 'session' as const,
-          date: s.date,
-          title: s.name || 'Séance',
-          studentIds: s.presentStudentIds || [],
-          raw: s
-        }));
+        .map(s => {
+          const linkedConv = convos.find(c => c.id === s.convocationId || c.sessionId === s.id);
+          const mergedStudentIds = Array.from(new Set([
+            ...(s.enrolledStudentIds || []),
+            ...(s.presentStudentIds || []),
+            ...(linkedConv?.studentIds || [])
+          ]));
+          return {
+            id: s.id,
+            type: 'session' as const,
+            date: s.date,
+            title: s.name || 'Séance',
+            studentIds: mergedStudentIds,
+            raw: s
+          };
+        });
 
       setEvents([...convoEvents, ...sessionEvents]);
     } catch (err) {
@@ -231,6 +254,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
     setNewEventRequireLicense(false);
     setNewEventRequireParentalAuth(false);
     setNewEventRequireSwimmingCertificate(false);
+    setNewEventRequirePaid(false);
     setNewEventMaxParticipants('');
     setNewEventRegistrationOpenDate('');
     setNewEventRegistrationCloseDate('');
@@ -263,6 +287,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
           requireLicense: newEventRequireLicense,
           requireParentalAuth: newEventRequireParentalAuth,
           requireSwimmingCertificate: newEventRequireSwimmingCertificate,
+          requirePaid: newEventRequirePaid,
           maxParticipants: newEventMaxParticipants ? Number(newEventMaxParticipants) : null,
           registrationOpenDate: newEventRegistrationOpenDate || null,
           registrationCloseDate: newEventRegistrationCloseDate || null,
@@ -302,6 +327,7 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
           requireLicense: newEventRequireLicense,
           requireParentalAuth: newEventRequireParentalAuth,
           requireSwimmingCertificate: newEventRequireSwimmingCertificate,
+          requirePaid: newEventRequirePaid,
           maxParticipants: newEventMaxParticipants ? Number(newEventMaxParticipants) : undefined,
           registrationOpenDate: newEventRegistrationOpenDate || undefined,
           registrationCloseDate: newEventRegistrationCloseDate || undefined,
@@ -351,24 +377,43 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
     }
   };
 
-  const handleDeleteEvent = async (event: CalendarEvent) => {
-    if (window.confirm(`Êtes-vous sûr de vouloir supprimer cet événement (${event.title}) ? Cette action est irréversible.`)) {
-      try {
-        if (event.type === 'session') {
-          await deleteSessionApi(event.id);
-          if ((event.raw as Session).convocationId) {
-            await deleteConvocationApi((event.raw as Session).convocationId!);
-          }
-        } else {
-          await deleteConvocationApi(event.id);
+  const confirmDeleteEvent = async () => {
+    if (!eventToDelete) return;
+    try {
+      if (eventToDelete.type === 'session') {
+        const sessionDoc = eventToDelete.raw as Session;
+        await deleteSessionApi(eventToDelete.id);
+        if (sessionDoc.convocationId) {
+          await deleteConvocationApi(sessionDoc.convocationId);
         }
-        
-        setSelectedEvent(null);
-        await loadCalendarData();
-      } catch (err) {
-        console.error(err);
-        alert('Erreur lors de la suppression de l\'événement.');
+        // Chercher aussi toute convocation ayant ce sessionId
+        const convos = await getConvocationsList(activeYear);
+        const linkedC = convos.find(c => c.sessionId === eventToDelete.id || c.id === sessionDoc.convocationId);
+        if (linkedC && linkedC.id !== sessionDoc.convocationId) {
+          await deleteConvocationApi(linkedC.id);
+        }
+      } else {
+        const convoDoc = eventToDelete.raw as Convocation;
+        await deleteConvocationApi(eventToDelete.id);
+        if (convoDoc.sessionId) {
+          await deleteSessionApi(convoDoc.sessionId);
+        }
+        // Chercher aussi toute séance ayant ce convocationId
+        const sessions = await getSessionsList(activeYear);
+        const linkedS = sessions.find(s => s.convocationId === eventToDelete.id || s.id === convoDoc.sessionId);
+        if (linkedS && linkedS.id !== convoDoc.sessionId) {
+          await deleteSessionApi(linkedS.id);
+        }
       }
+      
+      setEventToDelete(null);
+      setSelectedEvent(null);
+      setIsCreatingEvent(false);
+      setEditingEventId(null);
+      await loadCalendarData();
+    } catch (err: any) {
+      console.error('Erreur suppression événement:', err);
+      alert('Erreur lors de la suppression de l\'événement : ' + (err?.message || 'Erreur inattendue'));
     }
   };
 
@@ -463,7 +508,9 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
                 <th>Nom</th>
                 <th>Prénom</th>
                 ${!isPublic ? '<th>Classe</th>' : ''}
+                ${type === 'convocation' ? '<th>N° Licence</th><th>Catégorie</th><th>AP</th><th>Nage</th>' : ''}
                 ${type === 'liste' && !isPublic ? '<th>Présent</th><th>Observation</th>' : ''}
+                ${type === 'convocation' ? '<th>Signature</th>' : ''}
               </tr>
             </thead>
             <tbody>
@@ -472,7 +519,9 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
                   <td><strong>${s.lastName || ''}</strong></td>
                   <td>${s.firstName || ''}</td>
                   ${!isPublic ? `<td>${s.classGroup || ''}</td>` : ''}
+                  ${type === 'convocation' ? `<td style="font-family: monospace;">${s.licenseNumber || '-'}</td><td><strong>${getStudentCategory(s, activeYear)}</strong></td><td style="text-align:center;">${s.parentalAuth === 'OUI' ? '✓' : '✗'}</td><td style="text-align:center;">${s.swimmingCertificate === 'OUI' ? '✓' : '✗'}</td>` : ''}
                   ${type === 'liste' && !isPublic ? '<td></td><td></td>' : ''}
+                  ${type === 'convocation' ? '<td></td>' : ''}
                 </tr>
               `).join('')}
             </tbody>
@@ -960,6 +1009,11 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
                 <h2 className="text-3xl font-black text-slate-900 mt-3 mb-3 tracking-tight">{selectedEvent.title}</h2>
                 {selectedEvent.type === 'session' && (
                   <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                    {(selectedEvent.raw as Session).requirePaid && (
+                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full border border-emerald-200">
+                        💳 Cotisation à jour requise
+                      </span>
+                    )}
                     {(selectedEvent.raw as Session).requireLicense && (
                       <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-0.5 rounded-full border border-indigo-200">
                         🪪 Licence requise
@@ -1225,8 +1279,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
                     </button>
                   )}
                   <button
-                    onClick={() => handleDeleteEvent(selectedEvent)}
-                    className="px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg font-medium transition-colors flex items-center gap-2"
+                    onClick={() => setEventToDelete(selectedEvent)}
+                    className="px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg font-medium transition-colors flex items-center gap-2 cursor-pointer"
                     title="Supprimer l'événement"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -1446,7 +1500,21 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
                       <span className="text-[10px] text-slate-500 font-medium">Contrôle inscription</span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                      <label className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${newEventRequirePaid ? 'bg-indigo-50/80 border-indigo-300 text-indigo-950' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'}`}>
+                        <input 
+                          type="checkbox" 
+                          id="requirePaidCal"
+                          className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 mt-0.5"
+                          checked={newEventRequirePaid}
+                          onChange={e => setNewEventRequirePaid(e.target.checked)}
+                        />
+                        <div>
+                          <span className="text-xs font-bold block">Cotisation à jour</span>
+                          <span className="text-[10px] text-slate-500 leading-tight block">Paiement validé exigé</span>
+                        </div>
+                      </label>
+
                       <label className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${newEventRequireLicense ? 'bg-indigo-50/80 border-indigo-300 text-indigo-950' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'}`}>
                         <input 
                           type="checkbox" 
@@ -1556,23 +1624,41 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
               </div>
 
               {/* Footer fixe toujours visible et ancré avec les boutons d'action */}
-              <div className="px-5 py-3 sm:px-6 sm:py-3.5 border-t border-slate-100 bg-slate-50/95 flex items-center justify-end gap-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsCreatingEvent(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-200/80 rounded-lg font-semibold text-sm transition-colors cursor-pointer"
-                  disabled={isSavingEvent}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingEvent}
-                  className="flex items-center gap-2 px-5 py-2.5 text-white bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] rounded-lg font-bold text-sm transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
-                >
-                  {isSavingEvent && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>{editingEventId ? 'Enregistrer les modifications' : 'Créer la séance'}</span>
-                </button>
+              <div className="px-5 py-3 sm:px-6 sm:py-3.5 border-t border-slate-100 bg-slate-50/95 flex items-center justify-between gap-3 shrink-0">
+                <div>
+                  {editingEventId && !isPublic && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const ev = events.find(e => e.id === editingEventId);
+                        if (ev) setEventToDelete(ev);
+                      }}
+                      className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-semibold text-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+                      title="Supprimer cet événement"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Supprimer</span>
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingEvent(false)}
+                    className="px-4 py-2 text-slate-600 hover:bg-slate-200/80 rounded-lg font-semibold text-sm transition-colors cursor-pointer"
+                    disabled={isSavingEvent}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingEvent}
+                    className="flex items-center gap-2 px-5 py-2.5 text-white bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] rounded-lg font-bold text-sm transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSavingEvent && <Loader2 className="w-4 h-4 animate-spin" />}
+                    <span>{editingEventId ? 'Enregistrer les modifications' : 'Créer la séance'}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1594,6 +1680,14 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
         onSuccess={() => {
           loadCalendarData();
         }}
+      />
+      {/* Boîte de dialogue de confirmation de suppression in-app (évite tout blocage window.confirm) */}
+      <ConfirmDialog
+        isOpen={!!eventToDelete}
+        title="Supprimer l'événement"
+        message={`Êtes-vous sûr de vouloir supprimer cet événement (« ${eventToDelete?.title} ») ? Cette action est irréversible.`}
+        onConfirm={confirmDeleteEvent}
+        onCancel={() => setEventToDelete(null)}
       />
     </div>
   );

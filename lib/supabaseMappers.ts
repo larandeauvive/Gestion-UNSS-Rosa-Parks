@@ -71,6 +71,7 @@ export function rowToSession(row: any): Session {
     requireLicense: row.require_license ?? row.requireLicense ?? false,
     requireParentalAuth: row.require_parental_auth ?? row.requireParentalAuth ?? false,
     requireSwimmingCertificate: row.require_swimming_certificate ?? row.requireSwimmingCertificate ?? false,
+    requirePaid: row.require_paid ?? row.requirePaid ?? false,
     schoolYear: row.school_year ?? row.schoolYear,
     enrolledStudentIds: row.enrolled_student_ids ?? row.enrolledStudentIds ?? [],
     presentStudentIds: row.present_student_ids ?? row.presentStudentIds ?? [],
@@ -103,6 +104,7 @@ export function sessionToRow(session: Partial<Session>): any {
   if (session.requireLicense !== undefined) row.require_license = session.requireLicense;
   if (session.requireParentalAuth !== undefined) row.require_parental_auth = session.requireParentalAuth;
   if (session.requireSwimmingCertificate !== undefined) row.require_swimming_certificate = session.requireSwimmingCertificate;
+  if (session.requirePaid !== undefined) row.require_paid = session.requirePaid;
   if (session.schoolYear !== undefined) row.school_year = session.schoolYear;
   if (session.enrolledStudentIds !== undefined) row.enrolled_student_ids = session.enrolledStudentIds;
   if (session.presentStudentIds !== undefined) row.present_student_ids = session.presentStudentIds;
@@ -140,7 +142,8 @@ export function rowToConvocation(row: any): Convocation {
     meetingTime: row.meeting_time ?? row.meetingTime,
     meetingLocation: row.meeting_location ?? row.meetingLocation,
     cafeteriaTime: row.cafeteria_time ?? row.cafeteriaTime,
-    returnTime: row.return_time ?? row.returnTime
+    returnTime: row.return_time ?? row.returnTime,
+    selectedCriteria: row.selected_criteria ?? row.selectedCriteria
   };
 }
 
@@ -164,6 +167,7 @@ export function convocationToRow(conv: Partial<Convocation>): any {
   if (conv.meetingLocation !== undefined) row.meeting_location = conv.meetingLocation;
   if (conv.cafeteriaTime !== undefined) row.cafeteria_time = conv.cafeteriaTime;
   if (conv.returnTime !== undefined) row.return_time = conv.returnTime;
+  if (conv.selectedCriteria !== undefined) row.selected_criteria = conv.selectedCriteria;
   return row;
 }
 

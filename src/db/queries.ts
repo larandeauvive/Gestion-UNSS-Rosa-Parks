@@ -112,6 +112,33 @@ export async function insertStudent(student: Omit<Student, 'id'> & { id?: string
   }
 }
 
+export async function getStudentById(id: string): Promise<Student | null> {
+  try {
+    const rows = await db.select().from(students).where(eq(students.id, id));
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return {
+      ...r,
+      gender: r.gender as any,
+      paid: r.paid as any,
+      parentalAuth: r.parentalAuth as any,
+      imageRights: r.imageRights as any,
+      swimmingCertificate: r.swimmingCertificate as any,
+      tshirt: r.tshirt as any,
+      amount: r.amount ?? undefined,
+      paymentMethod: r.paymentMethod ?? undefined,
+      checkNumber: r.checkNumber ?? undefined,
+      birthDate: r.birthDate ?? undefined,
+      size: r.size ?? undefined,
+      opussChecked: !!r.opussChecked,
+      isAdult: !!r.isAdult
+    } as Student;
+  } catch (error) {
+    console.error("Failed to query student by id:", error);
+    return null;
+  }
+}
+
 export async function updateStudentById(id: string, data: Partial<Student>): Promise<void> {
   try {
     const updatePayload: Record<string, any> = {
@@ -302,6 +329,7 @@ export async function getSessions(schoolYear?: string): Promise<Session[]> {
       requireLicense: !!r.requireLicense,
       requireParentalAuth: !!r.requireParentalAuth,
       requireSwimmingCertificate: !!r.requireSwimmingCertificate,
+      requirePaid: !!r.requirePaid,
       enrolledStudentIds: r.enrolledStudentIds ?? [],
       presentStudentIds: r.presentStudentIds ?? [],
       convocationId: r.convocationId ?? undefined,
@@ -338,6 +366,7 @@ export async function getSessionById(id: string): Promise<Session | null> {
       requireLicense: !!r.requireLicense,
       requireParentalAuth: !!r.requireParentalAuth,
       requireSwimmingCertificate: !!r.requireSwimmingCertificate,
+      requirePaid: !!r.requirePaid,
       enrolledStudentIds: r.enrolledStudentIds ?? [],
       presentStudentIds: r.presentStudentIds ?? [],
       convocationId: r.convocationId ?? undefined,
@@ -375,6 +404,7 @@ export async function createSession(data: Omit<Session, 'id'> & { id?: string })
       requireLicense: !!data.requireLicense,
       requireParentalAuth: !!data.requireParentalAuth,
       requireSwimmingCertificate: !!data.requireSwimmingCertificate,
+      requirePaid: !!data.requirePaid,
       schoolYear: data.schoolYear,
       enrolledStudentIds: data.enrolledStudentIds || [],
       presentStudentIds: data.presentStudentIds || [],
@@ -417,6 +447,7 @@ export async function updateSessionById(id: string, data: Partial<Session>): Pro
     if (data.requireLicense !== undefined) payload.requireLicense = data.requireLicense;
     if (data.requireParentalAuth !== undefined) payload.requireParentalAuth = data.requireParentalAuth;
     if (data.requireSwimmingCertificate !== undefined) payload.requireSwimmingCertificate = data.requireSwimmingCertificate;
+    if (data.requirePaid !== undefined) payload.requirePaid = data.requirePaid;
     if (data.schoolYear !== undefined) payload.schoolYear = data.schoolYear;
     if (data.enrolledStudentIds !== undefined) payload.enrolledStudentIds = data.enrolledStudentIds;
     if (data.presentStudentIds !== undefined) payload.presentStudentIds = data.presentStudentIds;
@@ -473,6 +504,7 @@ export async function getConvocations(schoolYear?: string): Promise<Convocation[
       meetingLocation: r.meetingLocation ?? undefined,
       cafeteriaTime: r.cafeteriaTime ?? undefined,
       returnTime: r.returnTime ?? undefined,
+      selectedCriteria: r.selectedCriteria ?? undefined,
     })) as Convocation[];
   } catch (error) {
     console.error("Failed to query convocations:", error);
@@ -502,6 +534,7 @@ export async function createConvocation(data: Omit<Convocation, 'id'> & { id?: s
       meetingLocation: data.meetingLocation || null,
       cafeteriaTime: data.cafeteriaTime || null,
       returnTime: data.returnTime || null,
+      selectedCriteria: data.selectedCriteria || null,
     });
     return id;
   } catch (error) {
@@ -530,6 +563,7 @@ export async function updateConvocationById(id: string, data: Partial<Convocatio
     if (data.meetingLocation !== undefined) payload.meetingLocation = data.meetingLocation;
     if (data.cafeteriaTime !== undefined) payload.cafeteriaTime = data.cafeteriaTime;
     if (data.returnTime !== undefined) payload.returnTime = data.returnTime;
+    if (data.selectedCriteria !== undefined) payload.selectedCriteria = data.selectedCriteria;
 
     await db.update(convocations).set(payload).where(eq(convocations.id, id));
   } catch (error) {

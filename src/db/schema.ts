@@ -45,6 +45,7 @@ export const sessions = pgTable('sessions', {
   requireLicense: boolean('require_license').default(false),
   requireParentalAuth: boolean('require_parental_auth').default(false),
   requireSwimmingCertificate: boolean('require_swimming_certificate').default(false),
+  requirePaid: boolean('require_paid').default(false),
   schoolYear: text('school_year').notNull(),
   enrolledStudentIds: text('enrolled_student_ids').array(),
   presentStudentIds: text('present_student_ids').array(),
@@ -81,7 +82,8 @@ export const convocations = pgTable('convocations', {
   meetingTime: text('meeting_time'),
   meetingLocation: text('meeting_location'),
   cafeteriaTime: text('cafeteria_time'),
-  returnTime: text('return_time')
+  returnTime: text('return_time'),
+  selectedCriteria: text('selected_criteria').array()
 });
 
 // Créneaux AS Soir personnels (evening_slots)

@@ -37,6 +37,7 @@ export interface PublicStudent {
   swimmingCertificate?: string; // OUI/NON pour statut savoir nager
   imageRights?: string; // OUI/NON pour droit à l'image
   licenseNumber?: string;
+  hasLicense?: boolean;
 }
 
 export interface CsvRow {
@@ -77,6 +78,7 @@ export interface Convocation {
   meetingLocation?: string; // Lieu de RDV
   cafeteriaTime?: string; // Heure de passage au self
   returnTime?: string; // Heure de retour
+  selectedCriteria?: string[]; // Critères personnalisés sélectionnés pour la convocation
 }
 
 export interface SessionTeam {
@@ -98,6 +100,7 @@ export interface Session {
   requireLicense: boolean; // Obligation d'avoir un numéro de licence valide
   requireParentalAuth?: boolean; // Obligation d'avoir l'autorisation parentale
   requireSwimmingCertificate?: boolean; // Obligation d'avoir l'attestation savoir nager
+  requirePaid?: boolean; // Obligation d'avoir la cotisation à jour (élève ayant payé)
   name: string; // Nom de la séance (ex: "Entraînement Mercredi")
   schoolYear: string;
   enrolledStudentIds: string[]; // Élèves inscrits

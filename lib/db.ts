@@ -25,9 +25,11 @@ import {
   getLocalSessions,
   setLocalSessions,
   saveLocalSession,
+  deleteLocalSession,
   getLocalConvocations,
   setLocalConvocations,
   saveLocalConvocation,
+  deleteLocalConvocation,
   getLocalEveningSlots,
   setLocalEveningSlots,
   getLocalStaffMembers,
@@ -662,50 +664,95 @@ export const saveSessionApi = async (data: Partial<Session> & { id?: string }): 
 };
 
 export const deleteSessionApi = async (id: string): Promise<void> => {
+  deleteLocalSession(id);
+  // Toujours supprimer dans l'API locale / CloudSQL Express
   try {
-    const { error } = await supabase.from('sessions').delete().eq('id', id);
-    if (error) throw error;
-  } catch {
     await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(id)}`, {
       method: 'DELETE'
     });
+  } catch (e) {
+    console.warn('API delete session error:', e);
+  }
+  // Et tenter la suppression dans Supabase
+  try {
+    await supabase.from('sessions').delete().eq('id', id);
+  } catch (e) {
+    console.warn('Supabase delete session error:', e);
   }
 };
 
 /**
- * Réservation d'un créneau / séance d'activité avec Supabase
+ * Réservation d'un créneau / séance d'activité avec Supabase et synchronisation convocation
  */
 export const enrollInSession = async (sessionId: string, studentId: string): Promise<void> => {
+  // Mise à jour immédiate du miroir local pour réactivité instantanée
+  const localSessions = getLocalSessions();
+  const localSes = localSessions.find(s => s.id === sessionId);
+  let convId: string | undefined = localSes?.convocationId;
+
+  if (localSes) {
+    const currentEnrolled = Array.from(new Set([...(localSes.enrolledStudentIds || []), studentId]));
+    saveLocalSession({ ...localSes, enrolledStudentIds: currentEnrolled });
+    
+    // Synchroniser la convocation locale liée (par convocationId ou sessionId)
+    const localConvs = getLocalConvocations();
+    const linkedConvs = localConvs.filter(c => c.id === localSes.convocationId || c.sessionId === sessionId);
+    linkedConvs.forEach(linkedConv => {
+      const convEnrolled = Array.from(new Set([...(linkedConv.studentIds || []), studentId]));
+      saveLocalConvocation({ ...linkedConv, studentIds: convEnrolled });
+    });
+  }
+
+  // Toujours synchroniser avec le backend serveur Express / PostgreSQL
   try {
-    // 1. Lire la séance courante
-    const { data: currentSession, error: fetchErr } = await supabase
-      .from('sessions')
-      .select('enrolled_student_ids, max_participants')
-      .eq('id', sessionId)
-      .single();
-
-    if (fetchErr) throw fetchErr;
-
-    const enrolledList: string[] = currentSession?.enrolled_student_ids || [];
-    if (!enrolledList.includes(studentId)) {
-      if (currentSession?.max_participants && enrolledList.length >= currentSession.max_participants) {
-        throw new Error('La séance est complète.');
-      }
-      enrolledList.push(studentId);
-
-      const { error: updateErr } = await supabase
-        .from('sessions')
-        .update({ enrolled_student_ids: enrolledList })
-        .eq('id', sessionId);
-
-      if (updateErr) throw updateErr;
-    }
-  } catch (err) {
-    console.warn('Supabase enrollInSession fallback to API:', err);
     await fetchJson(`${API_BASE}/sessions/${encodeURIComponent(sessionId)}/enroll`, {
       method: 'POST',
       body: JSON.stringify({ studentId })
     });
+  } catch (apiErr) {
+    console.warn('Backend API enroll error (falling back to Supabase/local):', apiErr);
+  }
+
+  try {
+    // 1. Lire la séance courante dans Supabase si accessible
+    const { data: currentSession, error: fetchErr } = await supabase
+      .from('sessions')
+      .select('enrolled_student_ids, max_participants, convocation_id')
+      .eq('id', sessionId)
+      .single();
+
+    if (!fetchErr && currentSession) {
+      convId = currentSession?.convocation_id || convId;
+      const enrolledList: string[] = currentSession?.enrolled_student_ids || [];
+      if (!enrolledList.includes(studentId)) {
+        if (currentSession?.max_participants && enrolledList.length >= currentSession.max_participants) {
+          throw new Error('La séance est complète.');
+        }
+        enrolledList.push(studentId);
+
+        await supabase
+          .from('sessions')
+          .update({ enrolled_student_ids: enrolledList })
+          .eq('id', sessionId);
+
+        // Synchroniser la convocation liée dans Supabase
+        if (convId) {
+          try {
+            const { data: convData } = await supabase
+              .from('convocations')
+              .select('student_ids')
+              .eq('id', convId)
+              .single();
+            const convList = Array.from(new Set([...(convData?.student_ids || []), studentId]));
+            await supabase.from('convocations').update({ student_ids: convList }).eq('id', convId);
+          } catch (cErr) {
+            console.warn('Erreur sync convocation Supabase:', cErr);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Supabase enroll error:', err);
   }
 };
 
@@ -909,13 +956,20 @@ export const saveConvocationApi = async (data: Partial<Convocation> & { id?: str
 };
 
 export const deleteConvocationApi = async (id: string): Promise<void> => {
+  deleteLocalConvocation(id);
+  // Toujours supprimer dans l'API locale / CloudSQL Express
   try {
-    const { error } = await supabase.from('convocations').delete().eq('id', id);
-    if (error) throw error;
-  } catch {
     await fetchJson(`${API_BASE}/convocations/${encodeURIComponent(id)}`, {
       method: 'DELETE'
     });
+  } catch (e) {
+    console.warn('API delete convocation error:', e);
+  }
+  // Et tenter la suppression dans Supabase
+  try {
+    await supabase.from('convocations').delete().eq('id', id);
+  } catch (e) {
+    console.warn('Supabase delete convocation error:', e);
   }
 };
 
