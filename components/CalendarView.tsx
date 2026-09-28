@@ -3,7 +3,7 @@ import { Convocation, Session, Student } from '../types';
 import { 
   getConvocationsList, getSessionsList, saveSessionApi, 
   deleteSessionApi, saveConvocationApi, deleteConvocationApi,
-  getAppSetting
+  getAppSetting, getStudentsList
 } from '../lib/db';
 import { 
   format, addMonths, subMonths, startOfMonth, endOfMonth, 
@@ -13,7 +13,7 @@ import { fr } from 'date-fns/locale';
 import { 
   ChevronLeft, ChevronRight, X, Printer, Users, FileText, 
   Calendar as CalendarIcon, PlusCircle, Loader2, Share2, 
-  Trash2, Edit3, Download, FileUp, ShieldCheck, Clock, MapPin 
+  Trash2, Edit3, Download, FileUp, ShieldCheck, Clock, MapPin, Sparkles
 } from 'lucide-react';
 import { RegistrationFormDoc } from '../types';
 import { RegistrationFormModal } from './RegistrationFormModal';
@@ -51,6 +51,18 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Élèves internes (récupération automatique si non fournis en mode public)
+  const [internalStudents, setInternalStudents] = useState<Student[]>(students || []);
+  useEffect(() => {
+    if (students && students.length > 0) {
+      setInternalStudents(students);
+    } else {
+      getStudentsList(activeYear).then(res => {
+        if (res && res.length > 0) setInternalStudents(res);
+      }).catch(() => {});
+    }
+  }, [students, activeYear]);
+
   // Mode d'affichage : 'agenda' (Planning / Liste adapté smartphone) ou 'month' (Grille mensuelle)
   // Sur smartphone (< 768px) ou sur lien public partagé, privilégie immédiatement le mode planning fluide
   const [viewMode, setViewMode] = useState<'month' | 'agenda'>(() => {
@@ -59,6 +71,9 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
     }
     return 'month';
   });
+
+  // Filtre d'étendue en mode Planning : 'all' (Tous les événements de la saison) ou 'month' (Uniquement le mois affiché)
+  const [agendaScope, setAgendaScope] = useState<'all' | 'month'>('all');
   
   // Formulaire d'inscription téléchargeable
   const [registrationForm, setRegistrationForm] = useState<RegistrationFormDoc | null>(null);
@@ -115,6 +130,43 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
       });
   }, [events, currentMonth]);
 
+  // Tous les événements triés chronologiquement
+  const sortedAllEvents = useMemo(() => {
+    return [...events].filter(e => e.date).sort((a, b) => {
+      const dDiff = a.date.localeCompare(b.date);
+      if (dDiff !== 0) return dDiff;
+      const timeA = a.type === 'session' ? (a.raw as Session).time : (a.raw as Convocation).departureDate?.includes('T') ? (a.raw as Convocation).departureDate.split('T')[1] : '';
+      const timeB = b.type === 'session' ? (b.raw as Session).time : (b.raw as Convocation).departureDate?.includes('T') ? (b.raw as Convocation).departureDate.split('T')[1] : '';
+      return (timeA || '').localeCompare(timeB || '');
+    });
+  }, [events]);
+
+  // Événement le plus proche / pertinent pour saut rapide
+  const nearestEvent = useMemo(() => {
+    if (events.length === 0) return null;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const upcoming = events
+      .filter(e => e.date && new Date(e.date) >= now)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (upcoming.length > 0) return upcoming[0];
+    const sorted = [...events].filter(e => e.date).sort((a, b) => a.date.localeCompare(b.date));
+    return sorted[0] || null;
+  }, [events]);
+
+  // Groupement par mois pour le mode planning (YYYY-MM)
+  const agendaMonthGroups = useMemo(() => {
+    const list = agendaScope === 'month' ? currentMonthEvents : sortedAllEvents;
+    const map: Record<string, CalendarEvent[]> = {};
+    for (const ev of list) {
+      if (!ev.date) continue;
+      const key = ev.date.slice(0, 7);
+      if (!map[key]) map[key] = [];
+      map[key].push(ev);
+    }
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+  }, [agendaScope, currentMonthEvents, sortedAllEvents]);
+
   const openEditModal = (event: CalendarEvent) => {
     if (event.type !== 'session') return;
     const session = event.raw as Session;
@@ -146,10 +198,22 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
 
   const loadCalendarData = useCallback(async () => {
     try {
-      const [convos, sessions] = await Promise.all([
+      let [convos, sessions] = await Promise.all([
         getConvocationsList(activeYear),
         getSessionsList(activeYear)
       ]);
+
+      // Si le filtre par activeYear n'a rien renvoyé, charger l'ensemble pour résilience totale inter-postes
+      if ((!convos || convos.length === 0) && (!sessions || sessions.length === 0)) {
+        const [allConvos, allSessions] = await Promise.all([
+          getConvocationsList(),
+          getSessionsList()
+        ]);
+        if ((allConvos && allConvos.length > 0) || (allSessions && allSessions.length > 0)) {
+          convos = allConvos;
+          sessions = allSessions;
+        }
+      }
 
       const convoEvents: CalendarEvent[] = convos
         .filter(c => c.departureDate && !isNaN(new Date(c.departureDate).getTime()) && !c.sessionId)
@@ -189,7 +253,34 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
           };
         });
 
-      setEvents([...convoEvents, ...sessionEvents]);
+      const allCombined = [...convoEvents, ...sessionEvents];
+      setEvents(allCombined);
+
+      // Auto-positionner le mois affiché sur le mois contenant des événements réels si le mois par défaut est vide
+      if (allCombined.length > 0) {
+        setCurrentMonth(prevMonth => {
+          const hasInCurrent = allCombined.some(e => e.date && isSameMonth(new Date(e.date), prevMonth));
+          if (hasInCurrent) return prevMonth;
+
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          const upcoming = allCombined
+            .filter(e => e.date && new Date(e.date) >= now)
+            .sort((a, b) => a.date.localeCompare(b.date));
+
+          if (upcoming.length > 0 && upcoming[0].date) {
+            return new Date(upcoming[0].date);
+          }
+
+          const sortedAll = [...allCombined]
+            .filter(e => e.date)
+            .sort((a, b) => a.date.localeCompare(b.date));
+          if (sortedAll.length > 0 && sortedAll[0].date) {
+            return new Date(sortedAll[0].date);
+          }
+          return prevMonth;
+        });
+      }
     } catch (err) {
       console.warn("Erreur chargement calendrier:", err);
     } finally {
@@ -544,8 +635,11 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
   };
 
   const handleShare = () => {
-    const url = new URL(window.location.href);
+    const url = new URL(window.location.origin + window.location.pathname);
     url.searchParams.set('public', 'calendar');
+    if (activeYear) {
+      url.searchParams.set('schoolYear', activeYear);
+    }
     navigator.clipboard.writeText(url.toString());
     alert('Lien du calendrier public copié dans le presse-papiers !');
   };
@@ -575,8 +669,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
             </div>
           </div>
 
-          {/* Navigation Mois (Précédent / Aujourd'hui / Suivant) */}
-          <div className="flex items-center gap-1 shrink-0">
+          {/* Navigation Mois (Précédent / Aujourd'hui / Événements / Suivant) */}
+          <div className="flex items-center gap-1.5 shrink-0">
             <button 
               onClick={prevMonth} 
               className="p-2 sm:p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl border border-slate-200 transition-colors cursor-pointer" 
@@ -587,10 +681,21 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
             </button>
             <button 
               onClick={() => setCurrentMonth(new Date())}
-              className="hidden md:inline-flex px-3 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
+              className="hidden md:inline-flex px-3 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors cursor-pointer"
             >
               Aujourd'hui
             </button>
+            {nearestEvent && !isSameMonth(new Date(nearestEvent.date), currentMonth) && (
+              <button 
+                type="button"
+                onClick={() => setCurrentMonth(new Date(nearestEvent.date))}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-200 transition-colors cursor-pointer"
+                title={`Afficher le mois des événements (${format(new Date(nearestEvent.date), 'MMMM yyyy', { locale: fr })})`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Voir {format(new Date(nearestEvent.date), 'MMM yyyy', { locale: fr })}</span>
+              </button>
+            )}
             <button 
               onClick={nextMonth} 
               className="p-2 sm:p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl border border-slate-200 transition-colors cursor-pointer" 
@@ -604,28 +709,53 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
 
         {/* Barre d'outils mobile : Onglets Planning / Mois & Actions */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
-          {/* Sélecteur de vue tactile pour smartphone */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => setViewMode('agenda')}
-              className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                viewMode === 'agenda' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>Planning ({currentMonthEvents.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('month')}
-              className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                viewMode === 'month' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <CalendarIcon className="w-4 h-4" />
-              <span>Mois</span>
-            </button>
+          {/* Sélecteur de vue tactile pour smartphone & mode planning */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setViewMode('agenda')}
+                className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                  viewMode === 'agenda' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Planning ({events.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('month')}
+                className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                  viewMode === 'month' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <CalendarIcon className="w-4 h-4" />
+                <span>Mois ({currentMonthEvents.length})</span>
+              </button>
+            </div>
+
+            {viewMode === 'agenda' && events.length > 0 && (
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setAgendaScope('all')}
+                  className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    agendaScope === 'all' ? 'bg-white text-indigo-700 font-bold shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Toute la saison ({events.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAgendaScope('month')}
+                  className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    agendaScope === 'month' ? 'bg-white text-indigo-700 font-bold shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Ce mois ({currentMonthEvents.length})
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Boutons d'actions */}
@@ -751,129 +881,169 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
 
       {/* VUE 1 : VUE AGENDA / PLANNING (PARFAITEMENT ADAPTÉE AUX SMARTPHONES) */}
       {viewMode === 'agenda' ? (
-        <div className="space-y-3 mb-6">
-          {currentMonthEvents.length === 0 ? (
+        <div className="space-y-4 mb-6">
+          {events.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-3 shadow-xs">
               <div className="w-12 h-12 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto">
                 <CalendarIcon className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-bold text-slate-800">Aucun événement ce mois-ci</h3>
+              <h3 className="text-base font-bold text-slate-800">Aucun événement programmé</h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Il n'y a pas encore de séance ou de convocation enregistrée pour {format(currentMonth, 'MMMM yyyy', { locale: fr })}.
+                Il n'y a pas encore de séance ou de convocation enregistrée pour cette année scolaire.
               </p>
-              <div className="pt-2 flex justify-center gap-2">
+            </div>
+          ) : agendaScope === 'month' && currentMonthEvents.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-3 shadow-xs">
+              <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+                <CalendarIcon className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800">Aucun événement en {format(currentMonth, 'MMMM yyyy', { locale: fr })}</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                {events.length} événement{events.length > 1 ? 's sont' : ' est'} programmé{events.length > 1 ? 's' : ''} sur d'autres mois de la saison.
+              </p>
+              <div className="pt-2 flex flex-wrap justify-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setCurrentMonth(new Date())}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+                  onClick={() => setAgendaScope('all')}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
                 >
-                  Revenir au mois en cours
+                  Voir tous les événements ({events.length})
                 </button>
+                {nearestEvent && (
+                  <button
+                    type="button"
+                    onClick={() => setCurrentMonth(new Date(nearestEvent.date))}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+                  >
+                    Aller au 1er événement ({format(new Date(nearestEvent.date), 'MMMM yyyy', { locale: fr })})
+                  </button>
+                )}
               </div>
             </div>
           ) : (
-            currentMonthEvents.map(event => {
-              const isSession = event.type === 'session';
-              const rawSession = isSession ? (event.raw as Session) : null;
-              const rawConv = !isSession ? (event.raw as Convocation) : null;
-              const eventDateObj = new Date(event.date);
-              const isPast = new Date(event.date).setHours(23, 59, 59, 999) < new Date().getTime();
-              const isFull = rawSession?.maxParticipants !== undefined && ((rawSession.enrolledStudentIds || []).length >= rawSession.maxParticipants);
-
+            agendaMonthGroups.map(([monthKey, monthEvts]) => {
+              const monthDate = new Date(`${monthKey}-01T00:00:00`);
               return (
-                <div
-                  key={event.id}
-                  onClick={() => {
-                    if (isPublic && isSession && rawSession) {
-                      setEnrollingSession(rawSession);
-                    } else {
-                      setSelectedEvent(event);
-                    }
-                  }}
-                  className={`bg-white rounded-2xl border-2 transition-all p-3.5 sm:p-4 shadow-xs hover:shadow-md cursor-pointer active:scale-[0.99] ${
-                    isSession ? 'border-indigo-100 hover:border-indigo-400' : 'border-emerald-100 hover:border-emerald-400'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Badge Date bien visible pour le scroll sur smartphone */}
-                    <div className="shrink-0 w-13 sm:w-16 py-2 bg-slate-100/90 rounded-xl text-center border border-slate-200/80 flex flex-col justify-center">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase">
-                        {format(eventDateObj, 'EEE', { locale: fr })}
+                <div key={monthKey} className="space-y-3">
+                  {agendaScope === 'all' && (
+                    <div className="flex items-center gap-2 px-1 pt-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-3 py-1 rounded-lg">
+                        {format(monthDate, 'MMMM yyyy', { locale: fr })}
                       </span>
-                      <span className="text-lg sm:text-xl font-black text-slate-900 leading-none my-0.5">
-                        {format(eventDateObj, 'dd')}
+                      <span className="text-xs font-bold text-slate-500">
+                        ({monthEvts.length} événement{monthEvts.length > 1 ? 's' : ''})
                       </span>
-                      <span className="text-[9px] font-bold text-indigo-700 uppercase">
-                        {format(eventDateObj, 'MMM', { locale: fr })}
-                      </span>
+                      <div className="flex-1 h-px bg-slate-200/80" />
                     </div>
+                  )}
 
-                    <div className="space-y-1 flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                          isSession ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'
-                        }`}>
-                          {isSession ? 'Séance' : 'Convocation'}
-                        </span>
-                        {rawSession?.isTeamRegistration && (
-                          <span className="text-[10px] font-bold bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Users className="w-3 h-3" /> Tournoi ({rawSession.teamSize || 4})
-                          </span>
-                        )}
-                        {isPast && (
-                          <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
-                            Passé
-                          </span>
-                        )}
-                        {isFull && !isPast && (
-                          <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
-                            Complet
-                          </span>
-                        )}
-                      </div>
+                  <div className="space-y-3">
+                    {monthEvts.map(event => {
+                      const isSession = event.type === 'session';
+                      const rawSession = isSession ? (event.raw as Session) : null;
+                      const rawConv = !isSession ? (event.raw as Convocation) : null;
+                      const eventDateObj = new Date(event.date);
+                      const isPast = new Date(event.date).setHours(23, 59, 59, 999) < new Date().getTime();
+                      const isFull = rawSession?.maxParticipants !== undefined && ((rawSession.enrolledStudentIds || []).length >= rawSession.maxParticipants);
 
-                      <h3 className="text-base sm:text-lg font-black text-slate-900 leading-snug">
-                        {event.title}
-                      </h3>
-
-                      <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-slate-600 font-medium">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>{isSession ? `${rawSession?.time || ''}${rawSession?.endTime ? ` - ${rawSession.endTime}` : ''}` : (rawConv?.departureDate?.includes('T') ? rawConv.departureDate.split('T')[1] : '')}</span>
-                        </span>
-                        {(rawSession?.location || rawConv?.guides) && (
-                          <>
-                            <span>•</span>
-                            <span className="flex items-center gap-1">
-                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span className="truncate max-w-[150px] sm:max-w-none">{rawSession?.location || rawConv?.guides}</span>
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="shrink-0 flex flex-col items-end justify-between self-stretch">
-                      <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
-                        👥 {event.studentIds.length} {rawSession?.maxParticipants ? `/ ${rawSession.maxParticipants}` : ''}
-                      </span>
-
-                      {isPublic && isSession && !isPast && !isFull && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (rawSession) {
+                      return (
+                        <div
+                          key={event.id}
+                          onClick={() => {
+                            if (isPublic && isSession && rawSession) {
                               setEnrollingSession(rawSession);
+                            } else {
+                              setSelectedEvent(event);
                             }
                           }}
-                          className="mt-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center gap-1 cursor-pointer"
+                          className={`bg-white rounded-2xl border-2 transition-all p-3.5 sm:p-4 shadow-xs hover:shadow-md cursor-pointer active:scale-[0.99] ${
+                            isSession ? 'border-indigo-100 hover:border-indigo-400' : 'border-emerald-100 hover:border-emerald-400'
+                          }`}
                         >
-                          <span>M'inscrire</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+                          <div className="flex items-start gap-3">
+                            {/* Badge Date bien visible pour le scroll sur smartphone */}
+                            <div className="shrink-0 w-13 sm:w-16 py-2 bg-slate-100/90 rounded-xl text-center border border-slate-200/80 flex flex-col justify-center">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase">
+                                {format(eventDateObj, 'EEE', { locale: fr })}
+                              </span>
+                              <span className="text-lg sm:text-xl font-black text-slate-900 leading-none my-0.5">
+                                {format(eventDateObj, 'dd')}
+                              </span>
+                              <span className="text-[9px] font-bold text-indigo-700 uppercase">
+                                {format(eventDateObj, 'MMM', { locale: fr })}
+                              </span>
+                            </div>
+
+                            <div className="space-y-1 flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                  isSession ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'
+                                }`}>
+                                  {isSession ? 'Séance' : 'Convocation'}
+                                </span>
+                                {rawSession?.isTeamRegistration && (
+                                  <span className="text-[10px] font-bold bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <Users className="w-3 h-3" /> Tournoi ({rawSession.teamSize || 4})
+                                  </span>
+                                )}
+                                {isPast && (
+                                  <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                                    Passé
+                                  </span>
+                                )}
+                                {isFull && !isPast && (
+                                  <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
+                                    Complet
+                                  </span>
+                                )}
+                              </div>
+
+                              <h3 className="text-base sm:text-lg font-black text-slate-900 leading-snug">
+                                {event.title}
+                              </h3>
+
+                              <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-slate-600 font-medium">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <span>{isSession ? `${rawSession?.time || ''}${rawSession?.endTime ? ` - ${rawSession.endTime}` : ''}` : (rawConv?.departureDate?.includes('T') ? rawConv.departureDate.split('T')[1] : '')}</span>
+                                </span>
+                                {(rawSession?.location || rawConv?.guides) && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="flex items-center gap-1">
+                                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                      <span className="truncate max-w-[150px] sm:max-w-none">{rawSession?.location || rawConv?.guides}</span>
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 flex flex-col items-end justify-between self-stretch">
+                              <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
+                                👥 {event.studentIds.length} {rawSession?.maxParticipants ? `/ ${rawSession.maxParticipants}` : ''}
+                              </span>
+
+                              {isPublic && isSession && !isPast && !isFull && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (rawSession) {
+                                      setEnrollingSession(rawSession);
+                                    }
+                                  }}
+                                  className="mt-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                  <span>M'inscrire</span>
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -882,16 +1052,46 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
         </div>
       ) : (
         /* VUE 2 : GRILLE MENSUELLE CLASSIQUE (OPTIMISÉE MOBILE) */
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-md shadow-slate-200/50 overflow-hidden mb-6">
-          <div className="grid grid-cols-7 border-b border-slate-200/80 bg-slate-50/50">
-            {weekDays.map(day => (
-              <div key={day} className="py-2.5 sm:py-3.5 text-center text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-                <span className="hidden sm:inline">{day}</span>
-                <span className="sm:hidden">{day.charAt(0)}</span>
+        <div className="space-y-4 mb-6">
+          {currentMonthEvents.length === 0 && events.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 shadow-xs animate-in fade-in duration-200">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 text-amber-700 text-lg border border-amber-200">
+                  🗓️
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-amber-950">
+                    Aucun événement pour {format(currentMonth, 'MMMM yyyy', { locale: fr })}
+                  </p>
+                  <p className="text-xs text-amber-800 truncate">
+                    {events.length} événement{events.length > 1 ? 's sont' : ' est'} programmé{events.length > 1 ? 's' : ''} cette saison.
+                    {nearestEvent && ` Prochaine séance : ${format(new Date(nearestEvent.date), 'dd MMMM yyyy', { locale: fr })}.`}
+                  </p>
+                </div>
               </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 auto-rows-fr">
+              {nearestEvent && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentMonth(new Date(nearestEvent.date))}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all whitespace-nowrap cursor-pointer active:scale-95 self-start sm:self-auto flex items-center gap-1.5"
+                >
+                  <span>Aller à {format(new Date(nearestEvent.date), 'MMMM yyyy', { locale: fr })}</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-md shadow-slate-200/50 overflow-hidden">
+            <div className="grid grid-cols-7 border-b border-slate-200/80 bg-slate-50/50">
+              {weekDays.map(day => (
+                <div key={day} className="py-2.5 sm:py-3.5 text-center text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                  <span className="hidden sm:inline">{day}</span>
+                  <span className="sm:hidden">{day.charAt(0)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 auto-rows-fr">
             {days.map((day, dayIdx) => {
               const dayEvents = events.filter(e => isEventOnDay(e.date, day)).sort((a, b) => {
                 const timeA = a.type === 'session' ? (a.raw as Session).time : (a.raw as Convocation).departureDate?.includes('T') ? (a.raw as Convocation).departureDate.split('T')[1] : '';
@@ -958,7 +1158,8 @@ export const CalendarView: React.FC<Props> = ({ students, activeYear, isPublic, 
             })}
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {/* Legend */}
       <div className="flex flex-wrap gap-6 items-center text-sm font-semibold text-slate-600 px-4 py-3 bg-white rounded-xl border border-slate-200/80 shadow-sm inline-flex mb-8">

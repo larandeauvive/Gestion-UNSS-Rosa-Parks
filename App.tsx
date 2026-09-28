@@ -117,6 +117,10 @@ export default function App() {
         if (params.get('public') === 'calendar') {
           setIsPublicCalendar(true);
         }
+        const schoolYearParam = params.get('schoolYear');
+        if (schoolYearParam) {
+          setActiveYear(schoolYearParam);
+        }
 
         // Check teacher link
         const isOldTeacherParam = params.get('public') === 'teacher';
@@ -334,7 +338,7 @@ export default function App() {
       <div className="min-h-screen bg-slate-100/70 flex flex-col justify-between">
         <div className="max-w-5xl mx-auto w-full px-2 py-3 sm:px-4 sm:py-6 space-y-3 sm:space-y-4">
           <CalendarView 
-            students={[]}
+            students={students}
             activeYear={activeYear}
             isPublic={true}
           />
